@@ -80,45 +80,57 @@ export class LocationService {
   getBiomeFromLocation(location: Location): string {
     const { latitude, longitude } = location;
     
-    // Water biome near coordinate boundaries
-    if (Math.abs(latitude % 1) < 0.1 || Math.abs(longitude % 1) < 0.1) {
-      return 'water';
+    // Coastal/Ocean areas (near major water bodies)
+    if (Math.abs(latitude % 1) < 0.05 || Math.abs(longitude % 1) < 0.05) {
+      return Math.random() < 0.5 ? 'ocean' : 'beach';
     }
     
-    // Urban areas based on coordinates
-    if (Math.abs(latitude) > 40 && Math.abs(longitude) > 70) {
-      return 'urban';
+    // Polar/Snow regions
+    if (Math.abs(latitude) > 66) {
+      return 'snow';
     }
     
-    // Mountain biome for high latitudes
-    if (Math.abs(latitude) > 60) {
-      return 'mountain';
+    // Mountain regions (high altitude indicators)
+    if (Math.abs(latitude) > 45 && Math.abs(latitude) < 66) {
+      return Math.random() < 0.3 ? 'mountain' : 'forest';
     }
     
-    // Desert biome for specific coordinate ranges
-    if (latitude > 20 && latitude < 40 && longitude > -120 && longitude < -80) {
-      return 'desert';
+    // Desert belt (subtropical)
+    if ((latitude > 15 && latitude < 35) || (latitude < -15 && latitude > -35)) {
+      return Math.random() < 0.4 ? 'desert' : 'urban';
     }
     
-    // Grass biome in northern hemisphere
-    if (latitude > 0) {
-      return 'grass';
+    // Tropical regions
+    if (Math.abs(latitude) < 15) {
+      return Math.random() < 0.5 ? 'tropical' : 'river';
     }
     
-    return 'normal';
+    // Urban detection (population density heuristic - near major coordinate intersections)
+    const coordSum = Math.abs(latitude) + Math.abs(longitude);
+    if (coordSum % 10 < 2) {
+      return Math.random() < 0.6 ? 'city' : 'residential';
+    }
+    
+    // Default to parks/grass
+    return Math.random() < 0.7 ? 'park' : 'forest';
   }
 
   getPokemonByBiome(biome: string): number[] {
     const biomeMap: { [key: string]: number[] } = {
-      water: [7, 8, 9, 54, 55, 72, 73, 90, 91, 98, 99, 116, 117, 118, 119, 120, 121, 129, 130, 131],
-      grass: [1, 2, 3, 25, 26, 43, 44, 45, 69, 70, 71, 102, 103, 114, 152, 153, 154],
-      urban: [19, 20, 52, 53, 81, 82, 100, 101, 109, 110, 132, 137, 233, 474],
-      mountain: [74, 75, 76, 95, 111, 112, 142, 144, 145, 146, 185, 207, 208, 246, 247, 248],
-      desert: [27, 28, 50, 51, 104, 105, 140, 141, 328, 329, 330, 331, 332, 443, 444, 445],
-      normal: [4, 5, 6, 16, 17, 18, 21, 22, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40],
+      park: [1, 2, 3, 10, 11, 12, 13, 14, 15, 16, 17, 18, 25, 26, 35, 36, 39, 40, 43, 44, 45, 152, 153, 154],
+      forest: [1, 2, 3, 10, 11, 12, 13, 14, 15, 43, 44, 45, 46, 47, 48, 49, 69, 70, 71, 102, 103, 113, 114],
+      mountain: [74, 75, 76, 95, 104, 105, 111, 112, 142, 147, 148, 149, 185, 207, 208, 246, 247, 248],
+      beach: [7, 8, 9, 54, 55, 60, 61, 62, 72, 73, 79, 80, 90, 91, 98, 99, 116, 117, 118, 119, 120, 121],
+      ocean: [7, 8, 9, 72, 73, 86, 87, 90, 91, 98, 99, 116, 117, 118, 119, 120, 121, 129, 130, 131, 147, 148, 149],
+      river: [7, 8, 54, 55, 60, 61, 62, 79, 80, 98, 99, 118, 119, 129, 130, 147, 148],
+      desert: [27, 28, 50, 51, 104, 105, 111, 112, 140, 141, 246, 247],
+      snow: [86, 87, 91, 124, 131, 144, 215, 220, 221, 225],
+      tropical: [1, 2, 3, 43, 44, 45, 69, 70, 71, 102, 103, 114, 147, 148, 149, 152, 153, 154],
+      city: [19, 20, 52, 53, 81, 82, 100, 101, 109, 110, 132, 137],
+      residential: [16, 17, 18, 19, 20, 35, 36, 39, 40, 52, 53, 63, 64, 65, 96, 97, 113, 122, 132],
     };
     
-    return biomeMap[biome] || biomeMap.normal;
+    return biomeMap[biome] || biomeMap.park;
   }
 
   async generatePokemonEncounters(location: Location, count: number = 5): Promise<PokemonEncounter[]> {
@@ -132,8 +144,11 @@ export class LocationService {
         const pokemonId = biomePokemon[Math.floor(Math.random() * biomePokemon.length)];
         const pokemonData = await pokeAPI.getPokemon(pokemonId);
         
-        const offsetLat = (Math.random() - 0.5) * 0.01;
-        const offsetLng = (Math.random() - 0.5) * 0.01;
+        // Spawn Pokemon 10-500 meters away (0.0001-0.005 degrees ≈ 10-500m)
+        const distance = 0.0001 + Math.random() * 0.0049;
+        const angle = Math.random() * 2 * Math.PI;
+        const offsetLat = Math.cos(angle) * distance;
+        const offsetLng = Math.sin(angle) * distance;
         
         return {
           pokemon: pokemonData,
