@@ -296,6 +296,7 @@ export const HuntScreen: React.FC = () => {
               <View style={styles.pokemonInfo}>
                 <Text style={styles.pokemonName}>{encounter.pokemon.name}</Text>
                 <Text style={styles.pokemonDistance}>{Math.round(distance)}m away</Text>
+                <Text style={styles.pokemonCoords}>📍 {encounter.location.latitude.toFixed(4)}, {encounter.location.longitude.toFixed(4)}</Text>
                 <Text style={styles.pokemonBiome}>{encounter.biome} biome</Text>
               </View>
             </TouchableOpacity>
@@ -535,6 +536,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 4,
+  },
+  pokemonCoords: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+    fontFamily: 'monospace',
   },
   pokemonBiome: {
     fontSize: 12,
