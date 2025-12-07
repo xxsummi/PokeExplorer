@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,16 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  TextInput,
+  NativeModules,
+  NativeEventEmitter,
+  PermissionsAndroid,
   Platform,
 } from 'react-native';
-import Voice, { SpeechResultsEvent, SpeechErrorEvent } from '@react-native-voice/voice';
 import { Pokemon } from './types';
 import { pokeAPI } from './api';
-import { PermissionManager } from './permissions';
+
+const { VoiceRecognition } = NativeModules;
+const voiceEmitter = new NativeEventEmitter(VoiceRecognition);
 
 interface VoiceSearchProps {
   onPokemonFound: (pokemon: Pokemon) => void;
@@ -23,182 +26,101 @@ export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClos
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isVoiceAvailable, setIsVoiceAvailable] = useState(false);
-  const [voiceChecked, setVoiceChecked] = useState(false);
 
-  const searchPokemon = useCallback(async (query: string) => {
-    const trimmed = query.trim();
-    if (!trimmed) return;
+  useEffect(() => {
+    const startListener = voiceEmitter.addListener('onSpeechStart', () => {
+      setIsListening(true);
+    });
+
+    const endListener = voiceEmitter.addListener('onSpeechEnd', () => {
+      setIsListening(false);
+    });
+
+    const resultsListener = voiceEmitter.addListener('onSpeechResults', (text: string) => {
+      setRecognizedText(text);
+      searchPokemon(text);
+    });
+
+    const errorListener = voiceEmitter.addListener('onSpeechError', () => {
+      setIsListening(false);
+      Alert.alert('Error', 'Voice recognition failed');
+    });
+
+    return () => {
+      startListener.remove();
+      endListener.remove();
+      resultsListener.remove();
+      errorListener.remove();
+      VoiceRecognition?.destroy();
+    };
+  }, []);
+
+  const searchPokemon = async (query: string) => {
     setLoading(true);
     try {
-      const results = await pokeAPI.searchPokemon(trimmed);
+      const results = await pokeAPI.searchPokemon(query.toLowerCase());
       if (results.length > 0) {
         onPokemonFound(results[0]);
       } else {
-        Alert.alert('Not Found', `No Pokemon found for "${trimmed}"`);
+        Alert.alert('Not Found', `No Pokemon found for "${query}"`);
       }
     } catch (error) {
-      console.log('Search error:', error);
       Alert.alert('Error', 'Failed to search Pokemon');
     } finally {
       setLoading(false);
     }
-  }, [onPokemonFound]);
+  };
 
-  const handleSpeechStart = useCallback(() => {
-    setIsListening(true);
-  }, []);
-
-  const handleSpeechEnd = useCallback(() => {
-    setIsListening(false);
-  }, []);
-
-  const handleSpeechResults = useCallback((event: SpeechResultsEvent) => {
-    const spokenText = event.value?.[0];
-    if (spokenText) {
-      setRecognizedText(spokenText);
-      searchPokemon(spokenText);
-    }
-  }, [searchPokemon]);
-
-  const handleSpeechError = useCallback((event: SpeechErrorEvent) => {
-    console.log('Voice error:', event);
-    setIsListening(false);
-    Alert.alert('Error', 'Voice recognition failed. Please try again.');
-  }, []);
-
-  const ensureMicrophonePermission = useCallback(async () => {
-    if (Platform.OS !== 'android') {
-      return true;
-    }
-    const granted = await PermissionManager.requestMicrophonePermission();
-    if (!granted) {
-      Alert.alert('Permission Needed', 'Please enable microphone access to use voice search.');
-    }
-    return granted;
-  }, []);
-
-  const stopListening = useCallback(async () => {
+  const startListening = async () => {
     try {
-      await Voice.stop();
-      await Voice.cancel();
-    } catch (error) {
-      console.log('Stop listening error:', error);
-    }
-  }, []);
-
-  const startListening = useCallback(async () => {
-    if (!isVoiceAvailable) {
-      Alert.alert('Not Available', 'Voice recognition is not available on this device.');
-      return;
-    }
-
-    const hasPermission = await ensureMicrophonePermission();
-    if (!hasPermission) {
-      return;
-    }
-
-    try {
-      await stopListening();
-      setRecognizedText('');
-      await Voice.start('en-US', {
-        EXTRA_PARTIAL_RESULTS: true,
-      });
-    } catch (error) {
-      console.log('Start listening error:', error);
-      Alert.alert('Error', 'Failed to start voice recognition');
-    }
-  }, [ensureMicrophonePermission, isVoiceAvailable, stopListening]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const initVoice = async () => {
-      try {
-        const available = await Voice.isAvailable();
-        if (isMounted) {
-          setIsVoiceAvailable(available);
-          setVoiceChecked(true);
-        }
-      } catch (error) {
-        console.log('Voice availability error:', error);
-        if (isMounted) {
-          setIsVoiceAvailable(false);
-          setVoiceChecked(true);
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Permission Denied', 'Microphone permission required');
+          return;
         }
       }
-    };
+      setRecognizedText('');
+      await VoiceRecognition.startListening();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to start voice recognition');
+    }
+  };
 
-    initVoice();
-    Voice.onSpeechStart = handleSpeechStart;
-    Voice.onSpeechEnd = handleSpeechEnd;
-    Voice.onSpeechResults = handleSpeechResults;
-    Voice.onSpeechError = handleSpeechError;
-
-    return () => {
-      isMounted = false;
-      stopListening();
-      Voice.destroy().then(Voice.removeAllListeners);
-    };
-  }, [handleSpeechStart, handleSpeechEnd, handleSpeechResults, handleSpeechError, stopListening]);
-
-  const handleClose = useCallback(() => {
-    stopListening();
-    onClose();
-  }, [onClose, stopListening]);
+  const stopListening = async () => {
+    try {
+      await VoiceRecognition.stopListening();
+    } catch (error) {
+      console.log('Stop error:', error);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.modal}>
-        <Text style={styles.title}>Search Pokemon</Text>
+        <Text style={styles.title}>🎤 Voice Search</Text>
         
-        {!voiceChecked ? (
-          <View style={styles.initializingContainer}>
-            <ActivityIndicator size="large" color="#2c5aa0" />
-            <Text style={styles.statusText}>Preparing voice search...</Text>
-          </View>
-        ) : isVoiceAvailable ? (
-          <>
-            <View style={styles.micContainer}>
-              <TouchableOpacity 
-                style={[styles.micButton, isListening && styles.micButtonActive]}
-                onPress={isListening ? stopListening : startListening}
-                disabled={loading}
-              >
-                <Text style={styles.micIcon}>{isListening ? '🔴' : '🎤'}</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={styles.statusText}>
-              {loading ? 'Searching...' : isListening ? 'Listening...' : 'Tap microphone to speak'}
-            </Text>
-            
-            {recognizedText ? (
-              <Text style={styles.recognizedText}>"{recognizedText}"</Text>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <TextInput
-              style={styles.input}
-              placeholder="Type Pokemon name..."
-              value={recognizedText}
-              onChangeText={setRecognizedText}
-              onSubmitEditing={() => searchPokemon(recognizedText)}
-            />
-            <TouchableOpacity 
-              style={styles.searchButton}
-              onPress={() => searchPokemon(recognizedText)}
-              disabled={loading}
-            >
-              <Text style={styles.buttonText}>Search</Text>
-            </TouchableOpacity>
-          </>
-        )}
+        <TouchableOpacity 
+          style={[styles.micButton, isListening && styles.micButtonActive]}
+          onPress={isListening ? stopListening : startListening}
+          disabled={loading}
+        >
+          <Text style={styles.micIcon}>{isListening ? '🔴' : '🎤'}</Text>
+        </TouchableOpacity>
         
-        {loading && <ActivityIndicator size="large" color="#2c5aa0" style={styles.loader} />}
+        <Text style={styles.statusText}>
+          {loading ? 'Searching...' : isListening ? 'Listening... Speak now!' : 'Tap to speak'}
+        </Text>
         
-        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+        {recognizedText ? (
+          <Text style={styles.recognizedText}>"{recognizedText}"</Text>
+        ) : null}
+        
+        {loading && <ActivityIndicator size="large" color="#2c5aa0" />}
+        
+        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
           <Text style={styles.closeButtonText}>Close</Text>
         </TouchableOpacity>
       </View>
@@ -230,9 +152,6 @@ const styles = StyleSheet.create({
     color: '#2c5aa0',
     marginBottom: 30,
   },
-  micContainer: {
-    marginBottom: 20,
-  },
   micButton: {
     width: 100,
     height: 100,
@@ -240,6 +159,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2c5aa0',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -265,35 +185,8 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     textAlign: 'center',
   },
-  loader: {
-    marginVertical: 15,
-  },
-  initializingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    padding: 12,
-    borderRadius: 8,
-    width: '100%',
-    marginBottom: 15,
-    fontSize: 16,
-  },
-  searchButton: {
-    backgroundColor: '#2c5aa0',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 15,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   closeButton: {
+    marginTop: 10,
     paddingHorizontal: 20,
     paddingVertical: 10,
   },

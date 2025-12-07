@@ -298,7 +298,7 @@ export const HuntScreen: React.FC = () => {
           
           return (
             <Marker
-              key={`${encounter.pokemon.id}-${encounter.timestamp}`}
+              key={`${encounter.pokemon.id}-${encounter.timestamp}-${index}`}
               coordinate={encounter.location}
               title={encounter.pokemon.name}
               description={`Tap here to catch • ${Math.round(distance)}m away`}
