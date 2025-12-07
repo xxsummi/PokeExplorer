@@ -45,8 +45,7 @@ export const HuntScreen: React.FC = () => {
 
   const initializeHunt = async () => {
     try {
-      // Set default location immediately
-      dispatch(setCurrentLocation({ latitude: 37.7749, longitude: -122.4194 }));
+      dispatch(setCurrentLocation({ latitude: 0, longitude: 0 }));
     } catch (error) {
       console.log('Hunt init error:', error);
       setError('Location services unavailable');
@@ -181,6 +180,33 @@ export const HuntScreen: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (viewMode === 'map' && MapView && mapRef.current && currentLocation && currentLocation.latitude !== 0) {
+      setTimeout(() => {
+        mapRef.current?.animateToRegion({
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }, 500);
+      }, 100);
+    }
+  }, [viewMode]);
+
+  const handleMapPress = () => {
+    setViewMode('map');
+    if (mapRef.current && currentLocation && currentLocation.latitude !== 0) {
+      setTimeout(() => {
+        mapRef.current?.animateToRegion({
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }, 600);
+      }, 200);
+    }
+  };
+
   if (!currentLocation || typeof currentLocation.latitude !== 'number' || typeof currentLocation.longitude !== 'number') {
     return (
       <View style={styles.loadingContainer}>
@@ -207,8 +233,8 @@ export const HuntScreen: React.FC = () => {
           provider={PROVIDER_GOOGLE}
           style={styles.map}
           initialRegion={{
-            latitude: currentLocation.latitude,
-            longitude: currentLocation.longitude,
+            latitude: currentLocation.latitude !== 0 ? currentLocation.latitude : 37.7749,
+            longitude: currentLocation.longitude !== 0 ? currentLocation.longitude : -122.4194,
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
           }}
@@ -218,10 +244,32 @@ export const HuntScreen: React.FC = () => {
           showsCompass={true}
           showsScale={true}
           mapType="standard"
+          onMapReady={() => {
+            if (mapRef.current && currentLocation.latitude !== 0) {
+              setTimeout(() => {
+                mapRef.current?.animateToRegion({
+                  latitude: currentLocation.latitude,
+                  longitude: currentLocation.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }, 1000);
+              }, 500);
+            }
+          }}
           onUserLocationChange={(event) => {
             if (event.nativeEvent.coordinate) {
               const { latitude, longitude } = event.nativeEvent.coordinate;
-              dispatch(setCurrentLocation({ latitude, longitude }));
+              if (currentLocation.latitude === 0 && currentLocation.longitude === 0) {
+                dispatch(setCurrentLocation({ latitude, longitude }));
+                setTimeout(() => {
+                  mapRef.current?.animateToRegion({
+                    latitude,
+                    longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }, 1000);
+                }, 300);
+              }
             }
           }}
         >
@@ -315,7 +363,7 @@ export const HuntScreen: React.FC = () => {
           <View style={styles.viewToggle}>
             <TouchableOpacity 
               style={[styles.toggleButton, viewMode === 'map' && styles.activeToggle]}
-              onPress={() => setViewMode('map')}
+              onPress={handleMapPress}
             >
               <Text style={[styles.toggleText, viewMode === 'map' && styles.activeToggleText]}>Map</Text>
             </TouchableOpacity>
