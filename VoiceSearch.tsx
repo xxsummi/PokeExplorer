@@ -1,4 +1,59 @@
 import React, { useState, useEffect } from 'react';
+
+const POKEMON_PHONETIC_MAP: Record<string, string> = {
+  'combi': 'combee',
+  'combo': 'combee',
+  'alola mola': 'alomomola',
+  'alola': 'alomomola',
+  'mola': 'alomomola',
+  'char is hard': 'charizard',
+  'char lizard': 'charizard',
+  'pika chew': 'pikachu',
+  'peekachu': 'pikachu',
+  'squirtle': 'squirtle',
+  'squirrel': 'squirtle',
+  'bulba sore': 'bulbasaur',
+  'bulb sore': 'bulbasaur',
+  'mewtwo': 'mewtwo',
+  'mew two': 'mewtwo',
+  'gengar': 'gengar',
+  'gang gar': 'gengar',
+  'dragonite': 'dragonite',
+  'dragon knight': 'dragonite',
+  'snorlax': 'snorlax',
+  'snore lacks': 'snorlax',
+  'gyarados': 'gyarados',
+  'gary dos': 'gyarados',
+  'lapras': 'lapras',
+  'lap ross': 'lapras',
+  'eevee': 'eevee',
+  'evie': 'eevee',
+  'vaporeon': 'vaporeon',
+  'vapor on': 'vaporeon',
+  'jolteon': 'jolteon',
+  'jolt on': 'jolteon',
+  'flareon': 'flareon',
+  'flare on': 'flareon',
+};
+
+function correctPokemonName(input: string): string {
+  const lower = input.toLowerCase().trim();
+  
+  // Check exact match in phonetic map
+  if (POKEMON_PHONETIC_MAP[lower]) {
+    return POKEMON_PHONETIC_MAP[lower];
+  }
+  
+  // Check partial matches
+  for (const [key, value] of Object.entries(POKEMON_PHONETIC_MAP)) {
+    if (lower.includes(key) || key.includes(lower)) {
+      return value;
+    }
+  }
+  
+  // Remove spaces for compound names
+  return lower.replace(/\s+/g, '');
+}
 import {
   View,
   Text,
@@ -20,9 +75,10 @@ const voiceEmitter = new NativeEventEmitter(VoiceRecognition);
 interface VoiceSearchProps {
   onPokemonFound: (pokemon: Pokemon) => void;
   onClose: () => void;
+  onSearchQuery?: (query: string) => void;
 }
 
-export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClose }) => {
+export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClose, onSearchQuery }) => {
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,7 +94,11 @@ export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClos
 
     const resultsListener = voiceEmitter.addListener('onSpeechResults', (text: string) => {
       setRecognizedText(text);
-      searchPokemon(text);
+      if (onSearchQuery) {
+        const corrected = correctPokemonName(text);
+        onSearchQuery(corrected);
+      }
+      onClose();
     });
 
     const errorListener = voiceEmitter.addListener('onSpeechError', () => {
@@ -56,19 +116,9 @@ export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClos
   }, []);
 
   const searchPokemon = async (query: string) => {
-    setLoading(true);
-    try {
-      const results = await pokeAPI.searchPokemon(query.toLowerCase());
-      if (results.length > 0) {
-        onPokemonFound(results[0]);
-      } else {
-        Alert.alert('Not Found', `No Pokemon found for "${query}"`);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to search Pokemon');
-    } finally {
-      setLoading(false);
-    }
+    onClose();
+    // Navigate back to Pokedex with search query
+    // The parent component will handle the search
   };
 
   const startListening = async () => {
@@ -138,6 +188,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 9999,
   },
   modal: {
     backgroundColor: '#fff',
@@ -145,6 +196,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     minWidth: 300,
+    zIndex: 10000,
   },
   title: {
     fontSize: 24,

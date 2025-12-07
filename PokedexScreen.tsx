@@ -16,6 +16,7 @@ import { RootState, addPokemon, setLoading } from './store';
 import { pokeAPI } from './api';
 import { Pokemon } from './types';
 import { VoiceSearch } from './VoiceSearch';
+import { initializePokemonSearch, searchPokemon, suggestPokemon, isIndexReady, canSearch, getIndexSize } from './fuzzySearch';
 
 interface PokedexScreenProps {
   onPokemonSelect: (pokemon: Pokemon) => void;
@@ -32,19 +33,76 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
   const [currentPage, setCurrentPage] = useState(1);
   const [pageData, setPageData] = useState<Pokemon[]>([]);
   const [loadingPage, setLoadingPage] = useState(false);
+  const [suggestions, setSuggestions] = useState<Pokemon[]>([]);
+  const [indexReady, setIndexReady] = useState(false);
+  const [buildingIndex, setBuildingIndex] = useState(false);
+  const [indexSize, setIndexSize] = useState(0);
   const dispatch = useDispatch();
 
   useEffect(() => {
     loadPage(currentPage);
+    initializeSearchIndex();
   }, [currentPage]);
+
+  const initializeSearchIndex = async () => {
+    if (!isIndexReady() && !buildingIndex) {
+      setBuildingIndex(true);
+      try {
+        await initializePokemonSearch(pokeAPI);
+        setIndexReady(true);
+      } catch (e) {
+        console.log('Failed to build index:', e);
+      } finally {
+        setBuildingIndex(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (searchQuery) {
-      searchPokemon();
+      performSearch();
     } else {
       setSearchResults([]);
+      setSuggestions([]);
     }
-  }, [searchQuery]);
+  }, [searchQuery, indexReady]);
+
+  // Poll index size and smart refresh results
+  useEffect(() => {
+    if (!indexReady && searchQuery) {
+      let lastResultCount = searchResults.length + suggestions.length;
+      const interval = setInterval(() => {
+        const currentSize = getIndexSize();
+        setIndexSize(currentSize);
+        
+        // Only re-search if we have a query and index has grown
+        if (canSearch()) {
+          const results = searchPokemon(searchQuery.toLowerCase().replace(/\s+/g, ''), 5);
+          const allSuggestions = suggestPokemon(searchQuery.toLowerCase().replace(/\s+/g, ''), 15);
+          const newResultCount = results.length + allSuggestions.length;
+          
+          // Only update if we found new matches
+          if (newResultCount > lastResultCount) {
+            setSearchResults(results.slice(0, 1).map(r => r.entry.data));
+            const remainingResults = results.slice(1);
+            const additionalSuggestions = allSuggestions
+              .filter(s => !results.some(r => r.entry.id === s.entry.id));
+            setSuggestions([
+              ...remainingResults.map(r => r.entry.data),
+              ...additionalSuggestions.map(s => s.entry.data)
+            ].slice(0, 10));
+            lastResultCount = newResultCount;
+          }
+        }
+        
+        if (currentSize >= 1025) {
+          setIndexReady(true);
+          clearInterval(interval);
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [indexReady, searchQuery]);
 
   const loadPage = async (page: number) => {
     setLoadingPage(true);
@@ -73,29 +131,59 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
     }
   };
 
-  const searchPokemon = async () => {
+  const performSearch = async () => {
     if (!searchQuery.trim()) return;
     
     setIsSearching(true);
+    const query = searchQuery.toLowerCase().replace(/\s+/g, '');
+    
     try {
-      const query = searchQuery.toLowerCase();
-      
-      // Try direct API fetch first (highest priority)
+      // Try direct ID match
       if (!isNaN(Number(query))) {
         const poke = await pokeAPI.getPokemon(Number(query));
         setSearchResults([poke]);
-      } else {
+        setSuggestions([]);
+        setIsSearching(false);
+        return;
+      }
+      
+      // Try direct name match first
+      try {
         const poke = await pokeAPI.getPokemonByName(query);
         setSearchResults([poke]);
+        setSuggestions([]);
+        setIsSearching(false);
+        return;
+      } catch {}
+      
+      // Use fuzzy search with whatever is loaded
+      if (!canSearch()) {
+        // No Pokemon loaded yet - keep searching
+        return;
       }
+      
+      // Search with partial or full index
+      const results = searchPokemon(query, 5);
+      const allSuggestions = suggestPokemon(query, 15);
+      
+      // Show top result as main result
+      setSearchResults(results.slice(0, 1).map(r => r.entry.data));
+      
+      // Show remaining results + additional suggestions as "Did you mean?"
+      const remainingResults = results.slice(1);
+      const additionalSuggestions = allSuggestions
+        .filter(s => !results.some(r => r.entry.id === s.entry.id));
+      
+      setSuggestions([
+        ...remainingResults.map(r => r.entry.data),
+        ...additionalSuggestions.map(s => s.entry.data)
+      ].slice(0, 10));
+      
+      setIsSearching(false);
     } catch (error) {
-      // Fallback to loaded Pokemon
-      const filtered = pokemon.filter(p => 
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.types.some(t => t.type.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
-      setSearchResults(filtered);
-    } finally {
+      console.log('Search error:', error);
+      setSearchResults([]);
+      setSuggestions([]);
       setIsSearching(false);
     }
   };
@@ -145,26 +233,70 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
         />
         <TouchableOpacity 
           style={styles.voiceButton}
-          onPress={() => setShowVoiceSearch(true)}
+          onPress={() => {
+            setSuggestions([]);
+            setShowVoiceSearch(true);
+          }}
         >
           <Text style={styles.voiceIcon}>🎤</Text>
         </TouchableOpacity>
       </View>
 
+      {!indexReady && getIndexSize() > 0 && (
+        <View style={styles.progressBanner}>
+          <Text style={styles.progressText}>
+            Loading Pokemon database... {getIndexSize()}/1025
+          </Text>
+        </View>
+      )}
+
       {isSearching || loadingPage ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2c5aa0" />
-          <Text>{isSearching ? 'Searching...' : 'Loading page...'}</Text>
+          <Text>
+            {loadingPage ? 'Loading page...' : 
+             !indexReady ? `Loading Pokemon... (${getIndexSize()}/1025)` : 
+             'Searching...'}
+          </Text>
         </View>
       ) : (
         <>
+          {suggestions.length > 0 && (
+            <View style={styles.suggestionsSection}>
+              <Text style={styles.suggestionsTitle}>Did you mean?</Text>
+              <ScrollView 
+                style={styles.suggestionsScroll}
+                contentContainerStyle={styles.suggestionsContent}
+              >
+                {suggestions.map((pokemon, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.suggestionButton}
+                    onPress={() => setSearchQuery(pokemon.name)}
+                  >
+                    <Image 
+                      source={{ uri: pokemon.sprites.front_default }} 
+                      style={styles.suggestionImage}
+                    />
+                    <Text style={styles.suggestionText}>
+                      {pokemon.name.charAt(0).toUpperCase() + pokemon.name.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
           <FlatList
             data={displayData}
             renderItem={renderPokemonItem}
             keyExtractor={(item) => item.id.toString()}
             numColumns={2}
             contentContainerStyle={styles.listContainer}
-            ListEmptyComponent={<Text style={styles.emptyText}>No Pokemon found</Text>}
+            ListEmptyComponent={
+              searchQuery && !isSearching ? 
+                <Text style={styles.emptyText}>No Pokemon found</Text> : 
+                null
+            }
           />
           
           {!searchQuery && (
@@ -197,7 +329,14 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
             setShowVoiceSearch(false);
             onPokemonSelect(poke);
           }}
-          onClose={() => setShowVoiceSearch(false)}
+          onClose={() => {
+            setShowVoiceSearch(false);
+            setSuggestions([]);
+          }}
+          onSearchQuery={(query) => {
+            setSearchQuery(query);
+            setShowVoiceSearch(false);
+          }}
         />
       )}
     </View>
@@ -328,5 +467,61 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  suggestionsSection: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    maxHeight: 250,
+  },
+  suggestionsTitle: {
+    fontSize: 14,
+    color: '#666',
+    padding: 12,
+    paddingBottom: 8,
+    fontWeight: '600',
+  },
+  suggestionsScroll: {
+    maxHeight: 200,
+  },
+  suggestionsContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  suggestionButton: {
+    backgroundColor: '#e3f2fd',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  suggestionImage: {
+    width: 40,
+    height: 40,
+    marginRight: 12,
+  },
+  suggestionText: {
+    color: '#2c5aa0',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  progressBanner: {
+    backgroundColor: '#fff3cd',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffc107',
+  },
+  progressText: {
+    color: '#856404',
+    fontSize: 13,
+    fontWeight: '500',
   },
 });

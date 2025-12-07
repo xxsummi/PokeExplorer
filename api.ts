@@ -5,6 +5,7 @@ const BASE_URL = 'https://pokeapi.co/api/v2';
 
 class PokeAPI {
   private cache = new Map<string, any>();
+  private cacheLoaded = false;
 
   private xhrRequest(url: string): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -45,7 +46,31 @@ class PokeAPI {
     }
   }
 
+  private async loadCacheFromStorage(): Promise<void> {
+    if (this.cacheLoaded) return;
+    
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const pokemonKeys = keys.filter(k => k.startsWith('pokemon_'));
+      
+      if (pokemonKeys.length > 0) {
+        const items = await AsyncStorage.multiGet(pokemonKeys);
+        for (const [key, value] of items) {
+          if (value) {
+            this.cache.set(key, JSON.parse(value));
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Failed to load cache from storage:', e);
+    }
+    
+    this.cacheLoaded = true;
+  }
+
   async getPokemon(id: number): Promise<Pokemon> {
+    await this.loadCacheFromStorage();
+    
     const cacheKey = `pokemon_${id}`;
     
     if (this.cache.has(cacheKey)) {
@@ -55,12 +80,15 @@ class PokeAPI {
     const response = await fetch(`${BASE_URL}/pokemon/${id}`);
     const pokemon = await response.json();
     
-    // Limit cache to 50 items
-    if (this.cache.size >= 50) {
-      const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
-    }
     this.cache.set(cacheKey, pokemon);
+    
+    // Persist to AsyncStorage
+    try {
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(pokemon));
+    } catch (e) {
+      console.log('Failed to persist pokemon to storage:', e);
+    }
+    
     return pokemon;
   }
 
@@ -97,6 +125,8 @@ class PokeAPI {
   }
 
   async getPokemonByName(name: string): Promise<Pokemon> {
+    await this.loadCacheFromStorage();
+    
     const cacheKey = `pokemon_name_${name}`;
     
     if (this.cache.has(cacheKey)) {
@@ -106,7 +136,16 @@ class PokeAPI {
     const response = await fetch(`${BASE_URL}/pokemon/${name}`);
     if (!response.ok) throw new Error(`Pokemon ${name} not found`);
     const pokemon = await response.json();
+    
     this.cache.set(cacheKey, pokemon);
+    
+    // Persist to AsyncStorage
+    try {
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(pokemon));
+    } catch (e) {
+      console.log('Failed to persist pokemon to storage:', e);
+    }
+    
     return pokemon;
   }
 
