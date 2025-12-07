@@ -124,8 +124,6 @@ export const HuntScreen: React.FC = () => {
     
     try {
       setHunting(true);
-      
-      // Generate Pokemon at current location without fetching new location
       await generateNearbyPokemon(currentLocation);
     } catch (error) {
       console.error('Start hunt error:', error);
@@ -193,12 +191,11 @@ export const HuntScreen: React.FC = () => {
   }
 
   const renderMapView = () => {
-    if (!MapView) {
+    if (!MapView || !currentLocation) {
       return (
         <View style={styles.mapPlaceholder}>
           <Text style={styles.mapPlaceholderText}>📍 Map View Unavailable</Text>
           <Text style={styles.mapPlaceholderSubtext}>Using List View</Text>
-          <Text style={styles.mapPlaceholderSubtext}>react-native-maps requires additional setup</Text>
         </View>
       );
     }
@@ -221,6 +218,12 @@ export const HuntScreen: React.FC = () => {
           showsCompass={true}
           showsScale={true}
           mapType="standard"
+          onUserLocationChange={(event) => {
+            if (event.nativeEvent.coordinate) {
+              const { latitude, longitude } = event.nativeEvent.coordinate;
+              dispatch(setCurrentLocation({ latitude, longitude }));
+            }
+          }}
         >
         {nearbyPokemon.map((encounter, index) => {
           const distance = currentLocation ? locationService.calculateDistance(
@@ -327,7 +330,7 @@ export const HuntScreen: React.FC = () => {
       </View>
       
       <View style={styles.mapContainer}>
-        {viewMode === 'map' ? renderMapView() : renderListView()}
+        {viewMode === 'map' && MapView ? renderMapView() : renderListView()}
       </View>
 
       <View style={styles.controls}>
