@@ -27,15 +27,15 @@ try {
   PROVIDER_GOOGLE = RNMaps.PROVIDER_GOOGLE;
 } catch (e) {
   console.log('Maps not available, using list view');
-  console.error('react-native-maps require error:', e);
 }
 
 export const HuntScreen: React.FC = () => {
   const [hunting, setHunting] = useState(false);
   const [nearbyPokemon, setNearbyPokemon] = useState<PokemonEncounter[]>([]);
-  const [viewMode, setViewMode] = useState<'map' | 'list'>(MapView ? 'map' : 'list');
+  const [viewMode, setViewMode] = useState<'map' | 'list'>('list');
   const [watchId, setWatchId] = useState<number | null>(null);
-  const mapRef = useRef<MapView>(null);
+  const [error, setError] = useState<string | null>(null);
+  const mapRef = useRef<any>(null);
   const { currentLocation, encounters } = useSelector((state: RootState) => state.app);
   const dispatch = useDispatch();
 
@@ -45,20 +45,11 @@ export const HuntScreen: React.FC = () => {
 
   const initializeHunt = async () => {
     try {
-      const hasPermission = await locationService.requestLocationPermission();
-      if (hasPermission) {
-        setTimeout(() => {
-          getCurrentLocation().catch(err => {
-            console.log('Location fetch failed:', err);
-            dispatch(setCurrentLocation({ latitude: 37.7749, longitude: -122.4194 }));
-          });
-        }, 500);
-      } else {
-        dispatch(setCurrentLocation({ latitude: 37.7749, longitude: -122.4194 }));
-      }
+      // Set default location immediately
+      dispatch(setCurrentLocation({ latitude: 37.7749, longitude: -122.4194 }));
     } catch (error) {
       console.log('Hunt init error:', error);
-      dispatch(setCurrentLocation({ latitude: 37.7749, longitude: -122.4194 }));
+      setError('Location services unavailable');
     }
   };
 
@@ -74,7 +65,7 @@ export const HuntScreen: React.FC = () => {
         });
         
         // Center map on user location
-        if (mapRef.current && MapView) {
+        if (MapView && mapRef.current) {
           try {
             mapRef.current.animateToRegion({
               ...location,
@@ -125,15 +116,22 @@ export const HuntScreen: React.FC = () => {
     }
   };
 
-  const startHunt = () => {
+  const startHunt = async () => {
     if (!currentLocation) {
       Alert.alert('Error', 'Location not available');
       return;
     }
     
-    setHunting(true);
-    startLocationTracking();
-    getCurrentLocation();
+    try {
+      setHunting(true);
+      
+      // Generate Pokemon at current location without fetching new location
+      await generateNearbyPokemon(currentLocation);
+    } catch (error) {
+      console.error('Start hunt error:', error);
+      Alert.alert('Error', 'Failed to start hunt. Please try again.');
+      setHunting(false);
+    }
   };
 
   const stopHunt = () => {
@@ -199,8 +197,8 @@ export const HuntScreen: React.FC = () => {
       return (
         <View style={styles.mapPlaceholder}>
           <Text style={styles.mapPlaceholderText}>📍 Map View Unavailable</Text>
-            <Text style={styles.mapPlaceholderSubtext}>Using List View</Text>
-            <Text style={styles.mapPlaceholderSubtext}>Ensure `react-native-maps` is installed and linked, and Google Maps API is enabled.</Text>
+          <Text style={styles.mapPlaceholderSubtext}>Using List View</Text>
+          <Text style={styles.mapPlaceholderSubtext}>react-native-maps requires additional setup</Text>
         </View>
       );
     }
