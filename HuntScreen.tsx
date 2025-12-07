@@ -8,18 +8,32 @@ import {
   ActivityIndicator,
   Platform,
   Image,
+  ScrollView,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { RootState, setCurrentLocation, addEncounter, addDiscoveredPokemon } from './store';
 import { Pokemon, PokemonEncounter, Location } from './types';
 import { locationService } from './locationService';
-import { GOOGLE_MAPS_API_KEY } from '@env';
+
+// Import MapView - will use list view if not available
+let MapView: any = null;
+let Marker: any = null;
+let PROVIDER_GOOGLE: any = null;
+
+try {
+  const RNMaps = require('react-native-maps');
+  MapView = RNMaps.default || RNMaps;
+  Marker = RNMaps.Marker;
+  PROVIDER_GOOGLE = RNMaps.PROVIDER_GOOGLE;
+} catch (e) {
+  console.log('Maps not available, using list view');
+  console.error('react-native-maps require error:', e);
+}
 
 export const HuntScreen: React.FC = () => {
   const [hunting, setHunting] = useState(false);
   const [nearbyPokemon, setNearbyPokemon] = useState<PokemonEncounter[]>([]);
-  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+  const [viewMode, setViewMode] = useState<'map' | 'list'>(MapView ? 'map' : 'list');
   const [watchId, setWatchId] = useState<number | null>(null);
   const mapRef = useRef<MapView>(null);
   const { currentLocation, encounters } = useSelector((state: RootState) => state.app);
@@ -33,13 +47,18 @@ export const HuntScreen: React.FC = () => {
     try {
       const hasPermission = await locationService.requestLocationPermission();
       if (hasPermission) {
-        getCurrentLocation();
+        setTimeout(() => {
+          getCurrentLocation().catch(err => {
+            console.log('Location fetch failed:', err);
+            dispatch(setCurrentLocation({ latitude: 37.7749, longitude: -122.4194 }));
+          });
+        }, 500);
       } else {
-        Alert.alert('Permission Denied', 'Location permission is required for Pokemon hunting');
+        dispatch(setCurrentLocation({ latitude: 37.7749, longitude: -122.4194 }));
       }
     } catch (error) {
-      console.log('Hunt initialization error:', error);
-      Alert.alert('Error', 'Unable to initialize hunt mode');
+      console.log('Hunt init error:', error);
+      dispatch(setCurrentLocation({ latitude: 37.7749, longitude: -122.4194 }));
     }
   };
 
@@ -48,20 +67,32 @@ export const HuntScreen: React.FC = () => {
       const location = await locationService.getCurrentLocation();
       if (location) {
         dispatch(setCurrentLocation(location));
-        generateNearbyPokemon(location);
+        
+        // Generate Pokemon without awaiting to prevent blocking
+        generateNearbyPokemon(location).catch(err => {
+          console.error('Failed to generate Pokemon:', err);
+        });
         
         // Center map on user location
-        if (mapRef.current) {
-          mapRef.current.animateToRegion({
-            ...location,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          }, 1000);
+        if (mapRef.current && MapView) {
+          try {
+            mapRef.current.animateToRegion({
+              ...location,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }, 1000);
+          } catch (mapError) {
+            console.error('Map animation error:', mapError);
+          }
         }
       }
     } catch (error) {
-      console.log('Location error:', error);
-      // Don't show alert to prevent crashes
+      console.error('Location error:', error);
+      // Set a default location to prevent crash
+      dispatch(setCurrentLocation({
+        latitude: 37.7749,
+        longitude: -122.4194,
+      }));
     }
   };
 
@@ -72,7 +103,8 @@ export const HuntScreen: React.FC = () => {
       });
       setWatchId(id);
     } catch (error) {
-      console.log('Location tracking error:', error);
+      console.error('Location tracking error:', error);
+      // Continue without tracking
     }
   };
 
@@ -87,8 +119,9 @@ export const HuntScreen: React.FC = () => {
       const encounters = await locationService.generatePokemonEncounters(location, count);
       setNearbyPokemon(encounters);
     } catch (error) {
-      console.log('Error in generateNearbyPokemon:', error);
-      Alert.alert('Error', 'Unable to generate nearby Pokemon. Please try again.');
+      console.error('Error in generateNearbyPokemon:', error);
+      // Don't show alert to prevent crashes, just log the error
+      setNearbyPokemon([]);
     }
   };
 
@@ -152,7 +185,7 @@ export const HuntScreen: React.FC = () => {
     };
   }, []);
 
-  if (!currentLocation) {
+  if (!currentLocation || typeof currentLocation.latitude !== 'number' || typeof currentLocation.longitude !== 'number') {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#2c5aa0" />
@@ -162,24 +195,35 @@ export const HuntScreen: React.FC = () => {
   }
 
   const renderMapView = () => {
-    return (
-      <MapView
-        ref={mapRef}
-        provider={PROVIDER_GOOGLE}
-        style={styles.map}
-        initialRegion={{
-          latitude: currentLocation.latitude,
-          longitude: currentLocation.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        }}
-        showsUserLocation={true}
-        showsMyLocationButton={true}
-        followsUserLocation={hunting}
-        showsCompass={true}
-        showsScale={true}
-        mapType="standard"
-      >
+    if (!MapView) {
+      return (
+        <View style={styles.mapPlaceholder}>
+          <Text style={styles.mapPlaceholderText}>📍 Map View Unavailable</Text>
+            <Text style={styles.mapPlaceholderSubtext}>Using List View</Text>
+            <Text style={styles.mapPlaceholderSubtext}>Ensure `react-native-maps` is installed and linked, and Google Maps API is enabled.</Text>
+        </View>
+      );
+    }
+    
+    try {
+      return (
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={styles.map}
+          initialRegion={{
+            latitude: currentLocation.latitude,
+            longitude: currentLocation.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          }}
+          showsUserLocation={true}
+          showsMyLocationButton={true}
+          followsUserLocation={hunting}
+          showsCompass={true}
+          showsScale={true}
+          mapType="standard"
+        >
         {nearbyPokemon.map((encounter, index) => {
           const distance = currentLocation ? locationService.calculateDistance(
             currentLocation.latitude,
@@ -206,17 +250,30 @@ export const HuntScreen: React.FC = () => {
             </Marker>
           );
         })}
-      </MapView>
-    );
+        </MapView>
+      );
+    } catch (error) {
+      console.log('Map render error:', error);
+      return (
+        <View style={styles.mapPlaceholder}>
+          <Text style={styles.mapPlaceholderText}>📍 Map Error</Text>
+          <Text style={styles.mapPlaceholderSubtext}>Using List View</Text>
+        </View>
+      );
+    }
   };
 
   const renderListView = () => {
     return (
-      <View style={styles.listContainer}>
+      <ScrollView style={styles.listContainer}>
         <Text style={styles.listTitle}>Nearby Pokemon</Text>
         <Text style={styles.locationText}>
           Location: {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
         </Text>
+        
+        {nearbyPokemon.length === 0 && (
+          <Text style={styles.noPokemonText}>No Pokemon nearby. Start hunting to find some!</Text>
+        )}
         
         {nearbyPokemon.map((encounter, index) => {
           const distance = currentLocation ? locationService.calculateDistance(
@@ -239,12 +296,13 @@ export const HuntScreen: React.FC = () => {
               <View style={styles.pokemonInfo}>
                 <Text style={styles.pokemonName}>{encounter.pokemon.name}</Text>
                 <Text style={styles.pokemonDistance}>{Math.round(distance)}m away</Text>
+                <Text style={styles.pokemonCoords}>📍 {encounter.location.latitude.toFixed(4)}, {encounter.location.longitude.toFixed(4)}</Text>
                 <Text style={styles.pokemonBiome}>{encounter.biome} biome</Text>
               </View>
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
     );
   };
 
@@ -252,20 +310,22 @@ export const HuntScreen: React.FC = () => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Pokemon Hunt</Text>
-        <View style={styles.viewToggle}>
-          <TouchableOpacity 
-            style={[styles.toggleButton, viewMode === 'map' && styles.activeToggle]}
-            onPress={() => setViewMode('map')}
-          >
-            <Text style={[styles.toggleText, viewMode === 'map' && styles.activeToggleText]}>Map</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.toggleButton, viewMode === 'list' && styles.activeToggle]}
-            onPress={() => setViewMode('list')}
-          >
-            <Text style={[styles.toggleText, viewMode === 'list' && styles.activeToggleText]}>List</Text>
-          </TouchableOpacity>
-        </View>
+        {MapView && (
+          <View style={styles.viewToggle}>
+            <TouchableOpacity 
+              style={[styles.toggleButton, viewMode === 'map' && styles.activeToggle]}
+              onPress={() => setViewMode('map')}
+            >
+              <Text style={[styles.toggleText, viewMode === 'map' && styles.activeToggleText]}>Map</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.toggleButton, viewMode === 'list' && styles.activeToggle]}
+              onPress={() => setViewMode('list')}
+            >
+              <Text style={[styles.toggleText, viewMode === 'list' && styles.activeToggleText]}>List</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
       
       <View style={styles.mapContainer}>
@@ -364,6 +424,22 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
+  mapPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  mapPlaceholderText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  mapPlaceholderSubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+  },
   listContainer: {
     flex: 1,
     padding: 16,
@@ -461,10 +537,23 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 4,
   },
+  pokemonCoords: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+    fontFamily: 'monospace',
+  },
   pokemonBiome: {
     fontSize: 12,
     color: '#999',
     marginTop: 2,
     textTransform: 'capitalize',
+  },
+  noPokemonText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#999',
+    marginTop: 32,
+    paddingHorizontal: 32,
   },
 });

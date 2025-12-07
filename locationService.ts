@@ -32,7 +32,8 @@ export class LocationService {
         },
         (error) => {
           console.log('Location error:', error);
-          reject(error);
+          // Resolve with null instead of rejecting to allow callers to handle gracefully
+          resolve(null);
         },
         { 
           enableHighAccuracy: true, 
@@ -125,17 +126,16 @@ export class LocationService {
     const biome = this.getBiomeFromLocation(location);
     const biomePokemon = this.getPokemonByBiome(biome);
     
-    for (let i = 0; i < count; i++) {
+    // Use Promise.allSettled to fetch all Pokemon in parallel without blocking
+    const promises = Array.from({ length: count }, async () => {
       try {
-        // Select Pokemon based on biome
         const pokemonId = biomePokemon[Math.floor(Math.random() * biomePokemon.length)];
         const pokemonData = await pokeAPI.getPokemon(pokemonId);
         
-        // Generate random location within 500m radius
-        const offsetLat = (Math.random() - 0.5) * 0.01; // ~500m
+        const offsetLat = (Math.random() - 0.5) * 0.01;
         const offsetLng = (Math.random() - 0.5) * 0.01;
         
-        const encounter: PokemonEncounter = {
+        return {
           pokemon: pokemonData,
           location: {
             latitude: location.latitude + offsetLat,
@@ -144,13 +144,19 @@ export class LocationService {
           timestamp: Date.now(),
           biome,
         };
-        
-        encounters.push(encounter);
       } catch (error) {
-        console.log('Error generating Pokemon encounter:', error);
-        // Continue with other Pokemon even if one fails
+        console.error('Error generating Pokemon encounter:', error);
+        return null;
       }
-    }
+    });
+    
+    const results = await Promise.allSettled(promises);
+    
+    results.forEach(result => {
+      if (result.status === 'fulfilled' && result.value) {
+        encounters.push(result.value);
+      }
+    });
     
     return encounters;
   }

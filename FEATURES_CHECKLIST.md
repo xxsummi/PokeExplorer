@@ -35,27 +35,27 @@
 ## 2. Pokedex Core (API Integration)
 
 ### ✅ API Integration
-- [x] PokeAPI integration
-- [x] Fetch Pokemon data (name, types, abilities, stats, sprites)
+<!-- - [x] PokeAPI integration -->
+<!-- - [x] Fetch Pokemon data (name, types, abilities, stats, sprites) -->
 - [x] Retry mechanism for failed requests
 - [x] Error handling
 - [x] Connection testing
 
 ### ✅ Search Functionality
-- [x] Search by name
-- [x] Search by ID
-- [x] Search by type (data available)
-- [x] Real-time search
+<!-- - [x] Search by name -->
+<!-- - [x] Search by ID -->
+<!-- - [x] Search by type (data available) -->
+<!-- - [x] Real-time search -->
 - [x] Voice search integration
 
 ### ✅ Detail View
-- [x] Full Pokemon information
-- [x] Official artwork display
-- [x] Base stats with visual bars
-- [x] Abilities list
-- [x] Physical stats (height, weight)
-- [x] Type badges with colors
-- [x] Evolution chain data (available)
+<!-- - [x] Full Pokemon information -->
+<!-- - [x] Official artwork display -->
+<!-- - [x] Base stats with visual bars -->
+<!-- - [x] Abilities list -->
+<!-- - [x] Physical stats (height, weight) -->
+<!-- - [x] Type badges with colors -->
+<!-- - [x] Evolution chain data (available) -->
 - [x] Flavor text (available from API)
 
 ### ✅ Offline Support

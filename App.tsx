@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  SafeAreaView,
 } from 'react-native';
 import { Provider } from 'react-redux';
 
@@ -121,13 +120,13 @@ function AppContent() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f0f8ff" />
       <View style={styles.content}>
         {renderScreen()}
       </View>
       {renderBottomNav()}
-    </SafeAreaView>
+    </View>
   );
 }
 
