@@ -6,6 +6,9 @@ buildscript {
         targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
         kotlinVersion = "2.1.20"
+        // Ensure a consistent Play Services location version to avoid runtime class/interface
+        // mismatches with native modules that expect a specific version.
+        playServicesLocationVersion = "18.0.0"
     }
     repositories {
         google()

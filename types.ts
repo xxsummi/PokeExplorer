@@ -51,4 +51,5 @@ export interface PokemonEncounter {
   pokemon: Pokemon;
   location: Location;
   timestamp: number;
+  biome?: string;
 }

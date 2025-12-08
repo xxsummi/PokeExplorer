@@ -7,18 +7,20 @@ import {
   StatusBar,
 } from 'react-native';
 import { Provider } from 'react-redux';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+
 import { store } from './store';
 import { LoginScreen } from './LoginScreen';
 import { PokedexScreen } from './PokedexScreen';
 import { PokemonDetailScreen } from './PokemonDetailScreen';
 import { HuntScreen } from './HuntScreen';
 import { CameraScreen } from './CameraScreen';
+import { AR3DScreen } from './AR3DScreen';
 import { ProfileScreen } from './ProfileScreen';
+import { VRLiteHabitatScreen } from './VRLiteHabitatScreen';
 import { Pokemon } from './types';
 import { authService } from './auth';
 
-type Screen = 'login' | 'pokedex' | 'detail' | 'hunt' | 'camera' | 'profile';
+type Screen = 'login' | 'pokedex' | 'detail' | 'hunt' | 'ar' | 'vr' | 'profile';
 
 function AppContent() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('login');
@@ -26,16 +28,9 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = authService.onAuthStateChanged((user) => {
-      setIsAuthenticated(!!user);
-      if (user) {
-        setCurrentScreen('pokedex');
-      } else {
-        setCurrentScreen('login');
-      }
-    });
-
-    return unsubscribe;
+    // Skip Firebase auth for now
+    setIsAuthenticated(true);
+    setCurrentScreen('pokedex');
   }, []);
 
   const handleLogin = () => {
@@ -68,8 +63,10 @@ function AppContent() {
         ) : null;
       case 'hunt':
         return <HuntScreen />;
-      case 'camera':
-        return <CameraScreen />;
+      case 'ar':
+        return <AR3DScreen />;
+      case 'vr':
+        return <VRLiteHabitatScreen />;
       case 'profile':
         return <ProfileScreen onLogout={handleLogout} />;
       default:
@@ -99,17 +96,24 @@ function AppContent() {
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={[styles.navButton, currentScreen === 'camera' && styles.activeNavButton]}
-          onPress={() => setCurrentScreen('camera')}
+          style={[styles.navButton, currentScreen === 'ar' && styles.activeNavButton]}
+          onPress={() => setCurrentScreen('ar')}
         >
-          <Text style={[styles.navText, currentScreen === 'camera' && styles.activeNavText]}>📷 AR</Text>
+          <Text style={[styles.navText, currentScreen === 'ar' && styles.activeNavText]}>📷 AR</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.navButton, currentScreen === 'vr' && styles.activeNavButton]}
+          onPress={() => setCurrentScreen('vr')}
+        >
+          <Text style={[styles.navText, currentScreen === 'vr' && styles.activeNavText]}>🥽 VR</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={[styles.navButton, currentScreen === 'profile' && styles.activeNavButton]}
           onPress={() => setCurrentScreen('profile')}
         >
-          <Text style={[styles.navText, currentScreen === 'profile' && styles.activeNavText]}>👤 Profile</Text>
+          <Text style={[styles.navText, currentScreen === 'profile' && styles.activeNavText]}>👤</Text>
         </TouchableOpacity>
       </View>
     );
@@ -118,7 +122,9 @@ function AppContent() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f0f8ff" />
-      {renderScreen()}
+      <View style={styles.content}>
+        {renderScreen()}
+      </View>
       {renderBottomNav()}
     </View>
   );
@@ -127,9 +133,7 @@ function AppContent() {
 function App() {
   return (
     <Provider store={store}>
-      <SafeAreaProvider>
-        <AppContent />
-      </SafeAreaProvider>
+      <AppContent />
     </Provider>
   );
 }
@@ -138,6 +142,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f0f8ff',
+  },
+  content: {
+    flex: 1,
   },
   bottomNav: {
     flexDirection: 'row',

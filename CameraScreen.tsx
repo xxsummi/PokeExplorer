@@ -8,7 +8,7 @@ import {
   Image,
   Platform,
 } from 'react-native';
-import { Camera, useCameraDevices, useFrameProcessor } from 'react-native-vision-camera';
+import { Camera, useCameraDevice } from 'react-native-vision-camera';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, addDiscoveredPokemon } from './store';
@@ -20,13 +20,18 @@ export const CameraScreen: React.FC = () => {
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [overlayPokemon, setOverlayPokemon] = useState<any>(null);
   const camera = useRef<Camera>(null);
-  const devices = useCameraDevices();
-  const device = devices.back;
+  const device = useCameraDevice('back');
   const dispatch = useDispatch();
 
   React.useEffect(() => {
     requestCameraPermission();
   }, []);
+
+  React.useEffect(() => {
+    if (hasPermission) {
+      setIsActive(true);
+    }
+  }, [hasPermission]);
 
   const requestCameraPermission = async () => {
     try {
@@ -44,13 +49,16 @@ export const CameraScreen: React.FC = () => {
   const spawnRandomPokemon = async () => {
     try {
       const pokemon = await pokeAPI.getRandomPokemon();
+      console.log('Spawned Pokemon:', pokemon.name, pokemon.sprites?.front_default);
       setOverlayPokemon(pokemon);
       
-      // Auto-hide after 5 seconds
+      // Auto-hide after 8 seconds
       setTimeout(() => {
+        console.log('Hiding Pokemon overlay');
         setOverlayPokemon(null);
-      }, 5000);
+      }, 8000);
     } catch (error) {
+      console.log('Pokemon spawn error:', error);
       Alert.alert('Error', 'Failed to spawn Pokemon');
     }
   };
@@ -98,6 +106,10 @@ export const CameraScreen: React.FC = () => {
     return (
       <View style={styles.permissionContainer}>
         <Text style={styles.permissionText}>No camera device found</Text>
+        <Text style={styles.permissionSubtext}>Make sure camera permissions are granted</Text>
+        <TouchableOpacity style={styles.button} onPress={requestCameraPermission}>
+          <Text style={styles.buttonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -127,10 +139,18 @@ export const CameraScreen: React.FC = () => {
       
       {overlayPokemon && (
         <View style={styles.pokemonOverlay}>
-          <Image 
-            source={{ uri: overlayPokemon.sprites.front_default }}
-            style={styles.overlayImage}
-          />
+          {overlayPokemon.sprites?.front_default ? (
+            <Image 
+              source={{ uri: overlayPokemon.sprites.front_default }}
+              style={styles.overlayImage}
+              onError={() => console.log('Pokemon image failed to load')}
+              onLoad={() => console.log('Pokemon image loaded successfully')}
+            />
+          ) : (
+            <View style={styles.placeholderImage}>
+              <Text style={styles.placeholderText}>🔴</Text>
+            </View>
+          )}
           <Text style={styles.overlayText}>
             A wild {overlayPokemon.name} appeared!
           </Text>
@@ -171,32 +191,58 @@ const styles = StyleSheet.create({
   permissionText: {
     fontSize: 18,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
     color: '#333',
+  },
+  permissionSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#666',
   },
   camera: {
     flex: 1,
   },
   pokemonOverlay: {
     position: 'absolute',
-    top: '40%',
-    left: '50%',
-    transform: [{ translateX: -75 }, { translateY: -75 }],
+    top: '30%',
+    alignSelf: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    padding: 20,
+    borderRadius: 15,
+    borderWidth: 3,
+    borderColor: '#2c5aa0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
   },
   overlayImage: {
-    width: 100,
-    height: 100,
-    marginBottom: 8,
+    width: 120,
+    height: 120,
+    marginBottom: 12,
+    backgroundColor: 'transparent',
+  },
+  placeholderImage: {
+    width: 120,
+    height: 120,
+    marginBottom: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 60,
+  },
+  placeholderText: {
+    fontSize: 40,
   },
   overlayText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#2c5aa0',
     textAlign: 'center',
+    textTransform: 'capitalize',
   },
   controls: {
     position: 'absolute',

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Share,
+  ActivityIndicator,
 } from 'react-native';
 import { Pokemon } from './types';
 import { pokeAPI } from './api';
@@ -20,6 +21,36 @@ export const PokemonDetailScreen: React.FC<PokemonDetailScreenProps> = ({
   pokemon, 
   onBack 
 }) => {
+  const [evolutions, setEvolutions] = useState<any[]>([]);
+  const [loadingEvolutions, setLoadingEvolutions] = useState(true);
+
+  useEffect(() => {
+    loadEvolutions();
+  }, [pokemon.id]);
+
+  const loadEvolutions = async () => {
+    try {
+      const speciesResponse = await fetch(`https://pokeapi.co/api/v2/pokemon-species/${pokemon.id}`);
+      const speciesData = await speciesResponse.json();
+      const chainResponse = await fetch(speciesData.evolution_chain.url);
+      const chainData = await chainResponse.json();
+      
+      const evolutionList: any[] = [];
+      let current = chainData.chain;
+      
+      while (current) {
+        const id = current.species.url.split('/').filter(Boolean).pop();
+        evolutionList.push({ name: current.species.name, id });
+        current = current.evolves_to[0];
+      }
+      
+      setEvolutions(evolutionList);
+    } catch (error) {
+      console.log('Evolution error:', error);
+    } finally {
+      setLoadingEvolutions(false);
+    }
+  };
   const handleShare = async () => {
     try {
       await Share.share({
@@ -116,6 +147,30 @@ export const PokemonDetailScreen: React.FC<PokemonDetailScreenProps> = ({
             </Text>
           </View>
         ))}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Evolution Chain</Text>
+        {loadingEvolutions ? (
+          <ActivityIndicator size="small" color="#2c5aa0" />
+        ) : evolutions.length > 1 ? (
+          <View style={styles.evolutionContainer}>
+            {evolutions.map((evo, index) => (
+              <React.Fragment key={evo.id}>
+                <View style={styles.evolutionItem}>
+                  <Text style={styles.evolutionName}>
+                    #{evo.id} {evo.name.toUpperCase()}
+                  </Text>
+                </View>
+                {index < evolutions.length - 1 && (
+                  <Text style={styles.evolutionArrow}>→</Text>
+                )}
+              </React.Fragment>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.noEvolution}>No evolutions</Text>
+        )}
       </View>
     </ScrollView>
   );
@@ -268,5 +323,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: '#333',
+  },
+  evolutionContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  evolutionItem: {
+    backgroundColor: '#f8f9fa',
+    padding: 12,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  evolutionName: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#2c5aa0',
+    textTransform: 'capitalize',
+  },
+  evolutionArrow: {
+    fontSize: 20,
+    color: '#2c5aa0',
+    marginRight: 8,
+  },
+  noEvolution: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
   },
 });

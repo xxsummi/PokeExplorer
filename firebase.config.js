@@ -1,2 +1,2 @@
-// Firebase is auto-initialized by react-native-firebase
-// No manual configuration needed
+// React Native Firebase auto-initializes from google-services.json
+// No manual initialization needed

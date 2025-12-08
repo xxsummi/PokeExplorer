@@ -5,6 +5,7 @@ const BASE_URL = 'https://pokeapi.co/api/v2';
 
 class PokeAPI {
   private cache = new Map<string, any>();
+  private cacheLoaded = false;
 
   private xhrRequest(url: string): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -45,64 +46,50 @@ class PokeAPI {
     }
   }
 
+  private async loadCacheFromStorage(): Promise<void> {
+    if (this.cacheLoaded) return;
+    
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const pokemonKeys = keys.filter(k => k.startsWith('pokemon_'));
+      
+      if (pokemonKeys.length > 0) {
+        const items = await AsyncStorage.multiGet(pokemonKeys);
+        for (const [key, value] of items) {
+          if (value) {
+            this.cache.set(key, JSON.parse(value));
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Failed to load cache from storage:', e);
+    }
+    
+    this.cacheLoaded = true;
+  }
+
   async getPokemon(id: number): Promise<Pokemon> {
+    await this.loadCacheFromStorage();
+    
     const cacheKey = `pokemon_${id}`;
     
-    // Check cache first
     if (this.cache.has(cacheKey)) {
-      console.log(`Pokemon ${id} found in memory cache`);
       return this.cache.get(cacheKey);
     }
 
-    // Check AsyncStorage
+    const response = await fetch(`${BASE_URL}/pokemon/${id}`);
+    const pokemon = await response.json();
+    
+    this.cache.set(cacheKey, pokemon);
+    
+    // Persist to AsyncStorage
     try {
-      const cached = await AsyncStorage.getItem(cacheKey);
-      if (cached) {
-        console.log(`Pokemon ${id} found in storage cache`);
-        const pokemon = JSON.parse(cached);
-        this.cache.set(cacheKey, pokemon);
-        return pokemon;
-      }
-    } catch (error) {
-      console.log('Cache read error:', error);
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(pokemon));
+    } catch (e) {
+      console.log('Failed to persist pokemon to storage:', e);
     }
-
-    // Fetch from API with retry mechanism
-    let lastError;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        console.log(`Fetching Pokemon ${id} from API (attempt ${attempt})...`);
-        
-        const response = await fetch(`${BASE_URL}/pokemon/${id}`);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const pokemon = await response.json();
-        console.log(`Successfully fetched Pokemon ${id}: ${pokemon.name}`);
-        
-        // Cache the result
-        this.cache.set(cacheKey, pokemon);
-        try {
-          await AsyncStorage.setItem(cacheKey, JSON.stringify(pokemon));
-        } catch (cacheError) {
-          console.log('Cache write error:', cacheError);
-        }
-        
-        return pokemon;
-      } catch (error: any) {
-        lastError = error;
-        console.error(`Attempt ${attempt} failed for Pokemon ${id}:`, error.message);
-        if (attempt < 3) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-        }
-      }
-    }
-    throw new Error(`Failed to fetch Pokemon ${id} after 3 attempts: ${lastError?.message}`);
+    
+    return pokemon;
   }
 
   async searchPokemon(query: string): Promise<Pokemon[]> {
@@ -138,37 +125,28 @@ class PokeAPI {
   }
 
   async getPokemonByName(name: string): Promise<Pokemon> {
+    await this.loadCacheFromStorage();
+    
     const cacheKey = `pokemon_name_${name}`;
     
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);
     }
 
+    const response = await fetch(`${BASE_URL}/pokemon/${name}`);
+    if (!response.ok) throw new Error(`Pokemon ${name} not found`);
+    const pokemon = await response.json();
+    
+    this.cache.set(cacheKey, pokemon);
+    
+    // Persist to AsyncStorage
     try {
-      const cached = await AsyncStorage.getItem(cacheKey);
-      if (cached) {
-        const pokemon = JSON.parse(cached);
-        this.cache.set(cacheKey, pokemon);
-        return pokemon;
-      }
-    } catch (error) {
-      console.log('Cache read error:', error);
-    }
-
-    try {
-      const response = await fetch(`${BASE_URL}/pokemon/${name}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const pokemon = await response.json();
-      
-      this.cache.set(cacheKey, pokemon);
       await AsyncStorage.setItem(cacheKey, JSON.stringify(pokemon));
-      
-      return pokemon;
-    } catch (error) {
-      throw new Error(`Pokemon ${name} not found`);
+    } catch (e) {
+      console.log('Failed to persist pokemon to storage:', e);
     }
+    
+    return pokemon;
   }
 
   async getRandomPokemon(): Promise<Pokemon> {

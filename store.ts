@@ -29,6 +29,11 @@ const appSlice = createSlice({
     setPokemon: (state, action: PayloadAction<Pokemon[]>) => {
       state.pokemon = action.payload;
     },
+    addPokemon: (state, action: PayloadAction<Pokemon>) => {
+      if (!state.pokemon.find(p => p.id === action.payload.id)) {
+        state.pokemon.push(action.payload);
+      }
+    },
     addDiscoveredPokemon: (state, action: PayloadAction<Pokemon>) => {
       if (!state.discoveredPokemon.find(p => p.id === action.payload.id)) {
         state.discoveredPokemon.push(action.payload);
@@ -49,12 +54,17 @@ const appSlice = createSlice({
   },
 });
 
-export const { setUser, setPokemon, addDiscoveredPokemon, setCurrentLocation, addEncounter, setLoading } = appSlice.actions;
+export const { setUser, setPokemon, addPokemon, addDiscoveredPokemon, setCurrentLocation, addEncounter, setLoading } = appSlice.actions;
 
 export const store = configureStore({
   reducer: {
     app: appSlice.reducer,
   },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: false,
+      immutableCheck: false,
+    }),
 });
 
 export type RootState = ReturnType<typeof store.getState>;
