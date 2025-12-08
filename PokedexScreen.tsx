@@ -34,16 +34,34 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
   const loadInitialPokemon = async () => {
     if (pokemon.length > 0) return;
     
+    console.log('Loading initial Pokemon...');
     dispatch(setLoading(true));
+    
+    // Direct test
+    fetch("https://pokeapi.co/api/v2/pokemon")
+      .then(r => console.log("STATUS:", r.status))
+      .catch(e => console.log("ERROR:", e));
+    
+    // Test connection first
+    const connectionOk = await pokeAPI.testConnection();
+    if (!connectionOk) {
+      Alert.alert('Connection Error', 'Cannot connect to Pokemon API. Please check your internet connection.');
+      dispatch(setLoading(false));
+      return;
+    }
+    
     try {
       const pokemonList: Pokemon[] = [];
-      for (let i = 1; i <= 20; i++) {
+      for (let i = 1; i <= 5; i++) {
+        console.log(`Fetching Pokemon ${i}...`);
         const poke = await pokeAPI.getPokemon(i);
         pokemonList.push(poke);
       }
+      console.log(`Loaded ${pokemonList.length} Pokemon`);
       dispatch(setPokemon(pokemonList));
     } catch (error) {
-      Alert.alert('Error', 'Failed to load Pokemon');
+      console.error('Error loading Pokemon:', error);
+      Alert.alert('Connection Error', 'Unable to load Pokemon. Please check your internet connection and try again.');
     } finally {
       dispatch(setLoading(false));
     }
@@ -55,11 +73,14 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
       return;
     }
 
+    console.log('Searching for:', searchQuery);
     dispatch(setLoading(true));
     try {
       const results = await pokeAPI.searchPokemon(searchQuery);
+      console.log('Search results:', results);
       setSearchResults(results);
     } catch (error) {
+      console.error('Search error:', error);
       Alert.alert('Error', 'Pokemon not found');
       setSearchResults([]);
     } finally {

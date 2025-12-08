@@ -1,10 +1,11 @@
-import auth from '@react-native-firebase/auth';
+import auth, { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from '@react-native-firebase/auth';
 import { User } from './types';
 
 class AuthService {
+
   async signInWithEmail(email: string, password: string): Promise<User> {
     try {
-      const userCredential = await auth().signInWithEmailAndPassword(email, password);
+      const userCredential = await signInWithEmailAndPassword(getAuth(), email, password);
       const firebaseUser = userCredential.user;
       
       return {
@@ -20,7 +21,7 @@ class AuthService {
 
   async signUpWithEmail(email: string, password: string): Promise<User> {
     try {
-      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+      const userCredential = await createUserWithEmailAndPassword(getAuth(), email, password);
       const firebaseUser = userCredential.user;
       
       return {
@@ -36,14 +37,14 @@ class AuthService {
 
   async signOut(): Promise<void> {
     try {
-      await auth().signOut();
+      await signOut(getAuth());
     } catch (error: any) {
       throw new Error(error.message);
     }
   }
 
   getCurrentUser(): User | null {
-    const firebaseUser = auth().currentUser;
+    const firebaseUser = getAuth().currentUser;
     if (!firebaseUser) return null;
     
     return {
@@ -55,7 +56,7 @@ class AuthService {
   }
 
   onAuthStateChanged(callback: (user: User | null) => void) {
-    return auth().onAuthStateChanged((firebaseUser) => {
+    return onAuthStateChanged(getAuth(), (firebaseUser) => {
       if (firebaseUser) {
         callback({
           id: firebaseUser.uid,
