@@ -50,17 +50,66 @@ An interactive, augmented reality-enhanced Pokédex built with React Native. Dis
    ```
 
 2. **iOS Setup**
+
+   **Prerequisites:**
+   - Install Xcode from the Mac App Store (latest version recommended)
+   - Install Xcode Command Line Tools:
+     ```bash
+     xcode-select --install
+     ```
+   - Install rbenv (Ruby version manager) - Ruby 3.4+ has compatibility issues with CocoaPods:
+     ```bash
+     brew install rbenv ruby-build
+     ```
+   - Install Ruby 3.3 (compatible version):
+     ```bash
+     rbenv install 3.3.6
+     rbenv global 3.3.6
+     # Add to your ~/.zshrc or ~/.bash_profile:
+     echo 'eval "$(rbenv init - zsh)"' >> ~/.zshrc
+     source ~/.zshrc
+     ```
+   - Verify Ruby version:
+     ```bash
+     ruby --version  # Should show 3.3.x
+     ```
+
+   **Install iOS Dependencies:**
    ```bash
    cd ios
    bundle install
+   export LANG=en_US.UTF-8
    bundle exec pod install
    cd ..
    ```
 
+   **Xcode Configuration:**
+   1. Open `ios/PokeExplorer.xcworkspace` (NOT .xcodeproj) in Xcode
+   2. Add `GoogleService-Info.plist`:
+      - Download from Firebase Console
+      - Drag and drop into Xcode project (ensure "Copy items if needed" is checked)
+      - Place in `ios/PokeExplorer/` directory
+   3. Configure Signing:
+      - Select the project in Xcode
+      - Go to "Signing & Capabilities" tab
+      - Select your development team
+      - Xcode will automatically manage provisioning profiles
+
 3. **Environment Configuration**
-   - Copy `.env.example` to `.env`
-   - Update Firebase configuration in `.env`
-   - Add your API keys
+   - Ensure `.env` file exists (copy from `.env.example` if needed)
+   - Required environment variables:
+     ```env
+     POKE_API_BASE_URL=https://pokeapi.co/api/v2
+     FIREBASE_API_KEY=your_firebase_api_key
+     FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+     FIREBASE_PROJECT_ID=your_project_id
+     FIREBASE_STORAGE_BUCKET=your_project.firebasestorage.app
+     FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+     FIREBASE_APP_ID=your_app_id
+     FIREBASE_MEASUREMENT_ID=your_measurement_id
+     GOOGLE_MAPS_API_KEY=your_google_maps_api_key  # Optional
+     ```
+   - Get Firebase values from your Firebase project settings or `GoogleService-Info.plist`
 
 4. **Platform-Specific Setup**
 
@@ -69,8 +118,7 @@ An interactive, augmented reality-enhanced Pokédex built with React Native. Dis
    - Ensure Android SDK and emulator are set up
 
    **iOS:**
-   - Add `GoogleService-Info.plist` to Xcode project
-   - Configure signing in Xcode
+   - All setup is done above. Ensure `GoogleService-Info.plist` is added to Xcode project.
 
 ### Running the App
 
@@ -85,9 +133,28 @@ An interactive, augmented reality-enhanced Pokédex built with React Native. Dis
    ```
 
 3. **Run on iOS**
+
+   **Option A: Run on iOS Simulator**
    ```bash
+   # List available simulators
+   xcrun simctl list devices available
+   
+   # Run on default simulator
    npm run ios
+   
+   # Or specify a device
+   npm run ios -- --simulator="iPhone 15 Pro"
    ```
+
+   **Option B: Run on Physical iPhone**
+   1. Connect your iPhone via USB
+   2. Trust the computer on your iPhone if prompted
+   3. In Xcode, select your device from the device dropdown
+   4. Run:
+     ```bash
+     npm run ios -- --device
+     ```
+   5. On your iPhone: Settings → General → VPN & Device Management → Trust your developer certificate
 
 ## 📱 App Structure
 
@@ -190,15 +257,41 @@ npm run test:coverage
 
 2. **iOS build failures**
    ```bash
-   cd ios && pod deintegrate && pod install
+   cd ios
+   pod deintegrate
+   export LANG=en_US.UTF-8
+   bundle exec pod install
+   cd ..
    ```
 
-3. **Android build issues**
+3. **Ruby/CocoaPods "kconv" error**
+   - This occurs with Ruby 3.4+. Use Ruby 3.3.x instead:
+     ```bash
+     # Install rbenv if not installed
+     brew install rbenv ruby-build
+     
+     # Install Ruby 3.3.6
+     rbenv install 3.3.6
+     rbenv local 3.3.6  # In project directory
+     
+     # Reinstall gems
+     cd ios
+     bundle install
+     bundle exec pod install
+     ```
+
+4. **iOS pod install encoding errors**
+   ```bash
+   export LANG=en_US.UTF-8
+   cd ios && bundle exec pod install
+   ```
+
+5. **Android build issues**
    ```bash
    cd android && ./gradlew clean
    ```
 
-4. **Permission denied errors**
+6. **Permission denied errors**
    - Ensure all required permissions are granted in device settings
    - Check Firebase configuration files are properly placed
 
