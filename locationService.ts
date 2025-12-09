@@ -139,7 +139,7 @@ export class LocationService {
     const biomePokemon = this.getPokemonByBiome(biome);
     
     // Use Promise.allSettled to fetch all Pokemon in parallel without blocking
-    const promises = Array.from({ length: count }, async () => {
+    const promises = Array.from({ length: count }, async (_, index) => {
       try {
         const pokemonId = biomePokemon[Math.floor(Math.random() * biomePokemon.length)];
         const pokemonData = await pokeAPI.getPokemon(pokemonId);
@@ -156,7 +156,7 @@ export class LocationService {
             latitude: location.latitude + offsetLat,
             longitude: location.longitude + offsetLng,
           },
-          timestamp: Date.now(),
+          timestamp: Date.now() + index,
           biome,
         };
       } catch (error) {

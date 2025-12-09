@@ -10,6 +10,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, setUser } from './store';
 import { authService } from './auth';
+import { pokeAPI } from './api';
 
 interface ProfileScreenProps {
   onLogout: () => void;
@@ -34,6 +35,28 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
               onLogout();
             } catch (error: any) {
               Alert.alert('Error', error.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleClearCache = async () => {
+    Alert.alert(
+      'Clear Cache',
+      'This will clear all cached Pokémon data. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await pokeAPI.clearAllCache();
+              Alert.alert('Success', 'Cache cleared successfully');
+            } catch (error: any) {
+              Alert.alert('Error', 'Failed to clear cache');
             }
           },
         },
@@ -127,6 +150,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
         {discoveredPokemon.length === 0 && (
           <Text style={styles.noRecent}>No Pokemon discovered yet</Text>
         )}
+      </View>
+
+      <View style={styles.settingsContainer}>
+        <Text style={styles.sectionTitle}>Settings</Text>
+        <TouchableOpacity style={styles.clearCacheButton} onPress={handleClearCache}>
+          <Text style={styles.clearCacheText}>🗑️ Clear Cache</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -286,5 +316,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontStyle: 'italic',
+  },
+  settingsContainer: {
+    backgroundColor: '#fff',
+    margin: 16,
+    marginTop: 0,
+    marginBottom: 32,
+    padding: 20,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  clearCacheButton: {
+    backgroundColor: '#ff9800',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  clearCacheText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

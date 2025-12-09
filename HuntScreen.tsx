@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -40,21 +40,23 @@ export const HuntScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const mapRef = useRef<any>(null);
   const lastCatchTime = useRef<number>(0);
+  const hasGeneratedPokemon = useRef<boolean>(false);
+  const caughtTimestampsRef = useRef<Set<number>>(new Set());
+  const [renderKey, setRenderKey] = useState(0);
   const { currentLocation, encounters } = useSelector((state: RootState) => state.app);
   const dispatch = useDispatch();
 
   useEffect(() => {
-    initializeHunt();
+    const init = async () => {
+      await initializeHunt();
+      if (currentLocation && currentLocation.latitude !== 0 && !hasGeneratedPokemon.current) {
+        setHunting(true);
+        hasGeneratedPokemon.current = true;
+        await generateNearbyPokemon(currentLocation);
+      }
+    };
+    init();
   }, []);
-
-  useEffect(() => {
-    if (currentLocation && currentLocation.latitude !== 0 && nearbyPokemon.length === 0) {
-      setHunting(true);
-      generateNearbyPokemon(currentLocation).catch(err => {
-        console.error('Auto-hunt error:', err);
-      });
-    }
-  }, [currentLocation]);
 
 
 
@@ -120,9 +122,18 @@ export const HuntScreen: React.FC = () => {
 
   const generateNearbyPokemon = async (location: Location) => {
     try {
+      console.log('🔄 GENERATE: Starting generation');
       const count = Math.floor(Math.random() * 8) + 8;
       const encounters = await locationService.generatePokemonEncounters(location, count);
+      console.log('🔄 GENERATE: Generated', encounters.length, 'pokemon');
+      console.log('🔄 GENERATE: Clearing caught timestamps');
+      caughtTimestampsRef.current = new Set();
+      console.log('🔄 GENERATE: Setting nearby pokemon');
       setNearbyPokemon(encounters);
+      console.log('🔄 GENERATE: Forcing re-render');
+      setRenderKey(prev => prev + 1);
+      hasGeneratedPokemon.current = true;
+      console.log('🔄 GENERATE: Complete');
     } catch (error) {
       console.error('Error in generateNearbyPokemon:', error);
       setNearbyPokemon([]);
@@ -150,12 +161,11 @@ export const HuntScreen: React.FC = () => {
     stopLocationTracking();
   };
 
-  const catchPokemon = (encounter: PokemonEncounter) => {
-    const now = Date.now();
-    if (now - lastCatchTime.current < 500) return;
-    lastCatchTime.current = now;
-
-    if (!currentLocation || !encounter || !encounter.pokemon) return;
+  const handleCatch = useCallback((encounter: PokemonEncounter) => {
+    console.log('🎯 CATCH: Attempting to catch', encounter.pokemon.name);
+    console.log('🎯 CATCH: Timestamp:', encounter.timestamp);
+    console.log('🎯 CATCH: Current caught count:', caughtTimestampsRef.current.size);
+    console.log('🎯 CATCH: Caught timestamps:', Array.from(caughtTimestampsRef.current));
     
     const distance = locationService.calculateDistance(
       currentLocation.latitude,
@@ -165,29 +175,27 @@ export const HuntScreen: React.FC = () => {
     );
     
     if (distance > 100) {
-      PushNotification.localNotification({
-        channelId: 'pokemon-hunt',
-        title: 'Too Far! 📏',
-        message: `${encounter.pokemon.name} is too far away`,
-      });
+      Alert.alert('Too Far!', `${encounter.pokemon.name} is too far away`);
       return;
     }
     
     const catchSuccess = Math.random() < 0.7;
     if (catchSuccess) {
-      PushNotification.localNotification({
-        channelId: 'pokemon-hunt',
-        title: 'Pokemon Caught! 🎉',
-        message: `You caught ${encounter.pokemon.name}!`,
-      });
+      console.log('🎯 CATCH: Success! Adding timestamp:', encounter.timestamp);
+      caughtTimestampsRef.current.add(encounter.timestamp);
+      console.log('🎯 CATCH: New caught count:', caughtTimestampsRef.current.size);
+      console.log('🎯 CATCH: Updated caught timestamps:', Array.from(caughtTimestampsRef.current));
+      console.log('🎯 CATCH: Forcing re-render');
+      setRenderKey(prev => prev + 1);
+      Alert.alert('Pokemon Caught!', `You caught ${encounter.pokemon.name}!`);
+      dispatch(addEncounter(encounter));
+      dispatch(addDiscoveredPokemon(encounter.pokemon));
+      console.log('🎯 CATCH: Complete');
     } else {
-      PushNotification.localNotification({
-        channelId: 'pokemon-hunt',
-        title: 'Pokemon Ran Away! 💨',
-        message: `${encounter.pokemon.name} escaped!`,
-      });
+      console.log('🎯 CATCH: Failed - pokemon escaped');
+      Alert.alert('Pokemon Ran Away!', `${encounter.pokemon.name} escaped!`);
     }
-  };
+  }, [currentLocation, dispatch]);
 
   useEffect(() => {
     return () => {
@@ -230,6 +238,11 @@ export const HuntScreen: React.FC = () => {
       </View>
     );
   }
+
+  const visiblePokemon = nearbyPokemon.filter(e => !caughtTimestampsRef.current.has(e.timestamp));
+  console.log('📊 RENDER: Total pokemon:', nearbyPokemon.length, '| Caught:', caughtTimestampsRef.current.size, '| Visible:', visiblePokemon.length);
+  console.log('📊 RENDER: Nearby timestamps:', nearbyPokemon.map(p => p.timestamp));
+  console.log('📊 RENDER: Caught timestamps:', Array.from(caughtTimestampsRef.current));
 
   const renderMapView = () => {
     if (!MapView || !currentLocation) {
@@ -288,7 +301,7 @@ export const HuntScreen: React.FC = () => {
             }
           }}
         >
-        {nearbyPokemon.map((encounter, index) => {
+        {visiblePokemon.map((encounter, index) => {
           const distance = currentLocation ? locationService.calculateDistance(
             currentLocation.latitude,
             currentLocation.longitude,
@@ -303,29 +316,7 @@ export const HuntScreen: React.FC = () => {
               title={encounter.pokemon.name}
               description={`Tap here to catch • ${Math.round(distance)}m away`}
               image={{ uri: encounter.pokemon.sprites.front_default }}
-              onCalloutPress={() => {
-                const distance = locationService.calculateDistance(
-                  currentLocation.latitude,
-                  currentLocation.longitude,
-                  encounter.location.latitude,
-                  encounter.location.longitude
-                );
-                
-                if (distance > 100) {
-                  Alert.alert('Too Far!', `${encounter.pokemon.name} is too far away`);
-                  return;
-                }
-                
-                const catchSuccess = Math.random() < 0.7;
-                if (catchSuccess) {
-                  Alert.alert('Pokemon Caught!', `You caught ${encounter.pokemon.name}!`);
-                  dispatch(addEncounter(encounter));
-                  dispatch(addDiscoveredPokemon(encounter.pokemon));
-                  setNearbyPokemon(prev => prev.filter(p => p.timestamp !== encounter.timestamp));
-                } else {
-                  Alert.alert('Pokemon Ran Away!', `${encounter.pokemon.name} escaped!`);
-                }
-              }}
+              onCalloutPress={() => handleCatch(encounter)}
             />
           );
         })}
@@ -350,11 +341,11 @@ export const HuntScreen: React.FC = () => {
           Location: {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
         </Text>
         
-        {nearbyPokemon.length === 0 && (
+        {visiblePokemon.length === 0 && (
           <Text style={styles.noPokemonText}>No Pokemon nearby. Start hunting to find some!</Text>
         )}
         
-        {nearbyPokemon.map((encounter, index) => {
+        {visiblePokemon.map((encounter, index) => {
           const distance = currentLocation ? locationService.calculateDistance(
             currentLocation.latitude,
             currentLocation.longitude,
@@ -364,31 +355,9 @@ export const HuntScreen: React.FC = () => {
           
           return (
             <TouchableOpacity 
-              key={`${encounter.pokemon.id}-${index}`}
+              key={`${encounter.pokemon.id}-${encounter.timestamp}-${index}`}
               style={styles.pokemonItem}
-              onPress={() => {
-                const distance = locationService.calculateDistance(
-                  currentLocation.latitude,
-                  currentLocation.longitude,
-                  encounter.location.latitude,
-                  encounter.location.longitude
-                );
-                
-                if (distance > 100) {
-                  Alert.alert('Too Far!', `${encounter.pokemon.name} is too far away`);
-                  return;
-                }
-                
-                const catchSuccess = Math.random() < 0.7;
-                if (catchSuccess) {
-                  Alert.alert('Pokemon Caught!', `You caught ${encounter.pokemon.name}!`);
-                  dispatch(addEncounter(encounter));
-                  dispatch(addDiscoveredPokemon(encounter.pokemon));
-                  setNearbyPokemon(prev => prev.filter(p => p.timestamp !== encounter.timestamp));
-                } else {
-                  Alert.alert('Pokemon Ran Away!', `${encounter.pokemon.name} escaped!`);
-                }
-              }}
+              onPress={() => handleCatch(encounter)}
             >
               <Image
                 source={{ uri: encounter.pokemon.sprites.front_default }}
@@ -437,7 +406,9 @@ export const HuntScreen: React.FC = () => {
         <TouchableOpacity 
           style={styles.rescanButton}
           onPress={() => {
+            console.log('🔄 RESCAN: Button pressed');
             if (currentLocation) {
+              hasGeneratedPokemon.current = false;
               generateNearbyPokemon(currentLocation);
             }
           }}
@@ -446,7 +417,7 @@ export const HuntScreen: React.FC = () => {
         </TouchableOpacity>
         
         <Text style={styles.infoText}>
-          {nearbyPokemon.length} Pokemon nearby
+          {visiblePokemon.length} Pokemon nearby
         </Text>
         
         <Text style={styles.infoText}>

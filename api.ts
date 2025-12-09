@@ -6,6 +6,7 @@ const BASE_URL = 'https://pokeapi.co/api/v2';
 class PokeAPI {
   private cache = new Map<string, any>();
   private cacheLoaded = false;
+  private readonly MAX_CACHE_SIZE = 400;
 
   private xhrRequest(url: string): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -82,11 +83,12 @@ class PokeAPI {
     
     this.cache.set(cacheKey, pokemon);
     
-    // Persist to AsyncStorage
-    try {
-      await AsyncStorage.setItem(cacheKey, JSON.stringify(pokemon));
-    } catch (e) {
-      console.log('Failed to persist pokemon to storage:', e);
+    if (this.cache.size <= this.MAX_CACHE_SIZE) {
+      try {
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(pokemon));
+      } catch (e) {
+        await this.clearOldCache();
+      }
     }
     
     return pokemon;
@@ -139,14 +141,40 @@ class PokeAPI {
     
     this.cache.set(cacheKey, pokemon);
     
-    // Persist to AsyncStorage
-    try {
-      await AsyncStorage.setItem(cacheKey, JSON.stringify(pokemon));
-    } catch (e) {
-      console.log('Failed to persist pokemon to storage:', e);
+    if (this.cache.size <= this.MAX_CACHE_SIZE) {
+      try {
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(pokemon));
+      } catch (e) {
+        await this.clearOldCache();
+      }
     }
     
     return pokemon;
+  }
+
+  private async clearOldCache(): Promise<void> {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const pokemonKeys = keys.filter(k => k.startsWith('pokemon_'));
+      if (pokemonKeys.length > this.MAX_CACHE_SIZE) {
+        const toRemove = pokemonKeys.slice(0, pokemonKeys.length - this.MAX_CACHE_SIZE);
+        await AsyncStorage.multiRemove(toRemove);
+      }
+    } catch (e) {
+      console.log('Cache cleanup failed:', e);
+    }
+  }
+
+  async clearAllCache(): Promise<void> {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const pokemonKeys = keys.filter(k => k.startsWith('pokemon_'));
+      await AsyncStorage.multiRemove(pokemonKeys);
+      this.cache.clear();
+      console.log('Cache cleared successfully');
+    } catch (e) {
+      console.log('Failed to clear cache:', e);
+    }
   }
 
   async getRandomPokemon(): Promise<Pokemon> {
