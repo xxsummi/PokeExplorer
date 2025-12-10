@@ -23,8 +23,9 @@ interface PokedexScreenProps {
   onPokemonSelect: (pokemon: Pokemon) => void;
 }
 
-const POKEMON_PER_PAGE = 20;
+const POKEMON_PER_PAGE = 8; // Default pagination: 8 Pokemon per page
 const TOTAL_POKEMON = 151;
+const TYPE_FILTER_PAGE_SIZE = 6; // Show 6 Pokemon per page when filtered by type
 
 const POKEMON_TYPES = [
   'all', 'normal', 'fire', 'water', 'electric', 'grass', 'ice', 
@@ -32,15 +33,46 @@ const POKEMON_TYPES = [
   'rock', 'ghost', 'dragon', 'dark', 'steel', 'fairy'
 ];
 
+const POKEMON_GENERATIONS = [
+  { value: 'all', label: 'All Generations' },
+  { value: '1', label: 'Generation I (1-151)' },
+  { value: '2', label: 'Generation II (152-251)' },
+  { value: '3', label: 'Generation III (252-386)' },
+  { value: '4', label: 'Generation IV (387-493)' },
+  { value: '5', label: 'Generation V (494-649)' },
+  { value: '6', label: 'Generation VI (650-721)' },
+  { value: '7', label: 'Generation VII (722-809)' },
+  { value: '8', label: 'Generation VIII (810-905)' },
+  { value: '9', label: 'Generation IX (906-1025)' },
+];
+
+// Helper function to get generation from Pokemon ID
+const getGenerationFromId = (id: number): string => {
+  if (id >= 1 && id <= 151) return '1';
+  if (id >= 152 && id <= 251) return '2';
+  if (id >= 252 && id <= 386) return '3';
+  if (id >= 387 && id <= 493) return '4';
+  if (id >= 494 && id <= 649) return '5';
+  if (id >= 650 && id <= 721) return '6';
+  if (id >= 722 && id <= 809) return '7';
+  if (id >= 810 && id <= 905) return '8';
+  if (id >= 906 && id <= 1025) return '9';
+  return '1'; // Default to Gen 1
+};
+
 export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedGeneration, setSelectedGeneration] = useState<string>('all');
   const [searchResults, setSearchResults] = useState<Pokemon[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showVoiceSearch, setShowVoiceSearch] = useState(false);
   const [showTypeModal, setShowTypeModal] = useState(false);
+  const [showGenerationModal, setShowGenerationModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchPage, setSearchPage] = useState(1); // Pagination for search results
   const [pageData, setPageData] = useState<Pokemon[]>([]);
+  const [allSearchResults, setAllSearchResults] = useState<Pokemon[]>([]); // Store all search results
   const [loadingPage, setLoadingPage] = useState(false);
   const [suggestions, setSuggestions] = useState<Pokemon[]>([]);
   const [indexReady, setIndexReady] = useState(false);
@@ -68,13 +100,25 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
   };
 
   useEffect(() => {
-    if (searchQuery || selectedType !== 'all') {
+    if (searchQuery || selectedType !== 'all' || selectedGeneration !== 'all') {
+      setSearchPage(1); // Reset to first page when search/type/generation changes
       performSearch();
     } else {
       setSearchResults([]);
+      setAllSearchResults([]);
       setSuggestions([]);
     }
-  }, [searchQuery, selectedType, indexReady]);
+  }, [searchQuery, selectedType, selectedGeneration, indexReady]);
+
+  // Update displayed search results when page changes
+  useEffect(() => {
+    if (allSearchResults.length > 0) {
+      const pageSize = (selectedType !== 'all' || selectedGeneration !== 'all') ? TYPE_FILTER_PAGE_SIZE : 20;
+      const start = (searchPage - 1) * pageSize;
+      const end = start + pageSize;
+      setSearchResults(allSearchResults.slice(start, end));
+    }
+  }, [searchPage, allSearchResults, selectedType, selectedGeneration]);
 
   // Poll index size and smart refresh results
   useEffect(() => {
@@ -169,12 +213,46 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
         try {
           const typeResults = await pokeAPI.getPokemonByType(selectedType);
           results = typeResults;
+          
+          // Apply generation filter if needed
+          if (selectedGeneration !== 'all') {
+            results = results.filter(p => getGenerationFromId(p.id) === selectedGeneration);
+          }
         } catch (error) {
           console.log('Error fetching by type:', error);
           setSearchResults([]);
           setSuggestions([]);
           setIsSearching(false);
           return;
+        }
+      } else if (selectedGeneration !== 'all' && !query) {
+        // If only generation filter is selected (no type, no query), fetch Pokemon by ID range
+        try {
+          const genRanges: { [key: string]: { start: number; end: number } } = {
+            '1': { start: 1, end: 151 },
+            '2': { start: 152, end: 251 },
+            '3': { start: 252, end: 386 },
+            '4': { start: 387, end: 493 },
+            '5': { start: 494, end: 649 },
+            '6': { start: 650, end: 721 },
+            '7': { start: 722, end: 809 },
+            '8': { start: 810, end: 905 },
+            '9': { start: 906, end: 1025 },
+          };
+          
+          const range = genRanges[selectedGeneration];
+          if (range) {
+            // Load first batch of Pokemon from this generation (limit to 50 for performance)
+            const pokemonPromises = [];
+            const end = Math.min(range.start + 49, range.end);
+            for (let i = range.start; i <= end; i++) {
+              pokemonPromises.push(pokeAPI.getPokemon(i).catch(() => null));
+            }
+            const pokemonResults = await Promise.all(pokemonPromises);
+            results = pokemonResults.filter((p): p is Pokemon => p !== null);
+          }
+        } catch (error) {
+          console.log('Error fetching by generation:', error);
         }
       }
       
@@ -184,8 +262,12 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
         if (!isNaN(Number(query))) {
           try {
             const poke = await pokeAPI.getPokemon(Number(query));
-            // If type filter is active, check if Pokemon matches type
-            if (selectedType === 'all' || poke.types.some(t => t.type.name === selectedType)) {
+            // Check if Pokemon matches type and generation filters
+            const matchesType = selectedType === 'all' || poke.types.some((t: { type: { name: string } }) => t.type.name === selectedType);
+            const matchesGeneration = selectedGeneration === 'all' || getGenerationFromId(poke.id) === selectedGeneration;
+            
+            if (matchesType && matchesGeneration) {
+              setAllSearchResults([poke]);
               setSearchResults([poke]);
               setSuggestions([]);
               setIsSearching(false);
@@ -199,8 +281,12 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
         // Try direct name match
         try {
           const poke = await pokeAPI.getPokemonByName(query);
-          // If type filter is active, check if Pokemon matches type
-          if (selectedType === 'all' || poke.types.some(t => t.type.name === selectedType)) {
+          // Check if Pokemon matches type and generation filters
+          const matchesType = selectedType === 'all' || poke.types.some((t: { type: { name: string } }) => t.type.name === selectedType);
+          const matchesGeneration = selectedGeneration === 'all' || getGenerationFromId(poke.id) === selectedGeneration;
+          
+          if (matchesType && matchesGeneration) {
+            setAllSearchResults([poke]);
             setSearchResults([poke]);
             setSuggestions([]);
             setIsSearching(false);
@@ -218,7 +304,7 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
           );
         } else if (canSearch()) {
           // Use fuzzy search if no type filter
-          const fuzzyResults = searchPokemon(query, 20);
+          const fuzzyResults = searchPokemon(query, 100); // Get more results to filter
           results = fuzzyResults.map(r => r.entry.data);
         }
       }
@@ -226,12 +312,19 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
       // Apply type filter to fuzzy search results if needed
       if (selectedType !== 'all' && results.length > 0) {
         results = results.filter(p => 
-          p.types.some(t => t.type.name === selectedType)
+          p.types.some((t: { type: { name: string } }) => t.type.name === selectedType)
         );
       }
       
-      // Show results
-      setSearchResults(results.slice(0, 20));
+      // Apply generation filter if needed (applies to all result types)
+      if (selectedGeneration !== 'all' && results.length > 0) {
+        results = results.filter(p => getGenerationFromId(p.id) === selectedGeneration);
+      }
+      
+      // Store all results and paginate
+      setAllSearchResults(results);
+      const pageSize = (selectedType !== 'all' || selectedGeneration !== 'all') ? TYPE_FILTER_PAGE_SIZE : 20;
+      setSearchResults(results.slice(0, pageSize));
       
       // Generate suggestions if we have a query
       if (query && canSearch()) {
@@ -239,10 +332,9 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
         const filteredSuggestions = allSuggestions
           .map(s => s.entry.data)
           .filter(p => {
-            if (selectedType !== 'all') {
-              return p.types.some(t => t.type.name === selectedType);
-            }
-            return true;
+            const matchesType = selectedType === 'all' || p.types.some((t: { type: { name: string } }) => t.type.name === selectedType);
+            const matchesGeneration = selectedGeneration === 'all' || getGenerationFromId(p.id) === selectedGeneration;
+            return matchesType && matchesGeneration;
           })
           .filter(p => !results.some(r => r.id === p.id))
           .slice(0, 10);
@@ -290,7 +382,7 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
     </TouchableOpacity>
   );
 
-  const displayData = (searchQuery || selectedType !== 'all') ? searchResults : pageData;
+  const displayData = (searchQuery || selectedType !== 'all' || selectedGeneration !== 'all') ? searchResults : pageData;
 
   return (
     <View style={styles.container}>
@@ -315,6 +407,17 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
           </Text>
         </TouchableOpacity>
         <TouchableOpacity 
+          style={[
+            styles.typeFilterButton,
+            selectedGeneration !== 'all' && styles.typeFilterButtonActive
+          ]}
+          onPress={() => setShowGenerationModal(true)}
+        >
+          <Text style={styles.typeFilterText}>
+            {selectedGeneration === 'all' ? 'Gen' : `Gen ${selectedGeneration}`}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
           style={styles.voiceButton}
           onPress={() => {
             setSuggestions([]);
@@ -325,18 +428,22 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
         </TouchableOpacity>
       </View>
       
-      {selectedType !== 'all' && (
+      {(selectedType !== 'all' || selectedGeneration !== 'all') && (
         <TouchableOpacity 
           style={styles.clearFilterButton}
-          onPress={() => setSelectedType('all')}
+          onPress={() => {
+            setSelectedType('all');
+            setSelectedGeneration('all');
+          }}
         >
           <Text style={styles.clearFilterText}>
-            Clear type filter: {selectedType}
+            Clear filters{selectedType !== 'all' ? `: ${selectedType}` : ''}{selectedGeneration !== 'all' ? ` Gen ${selectedGeneration}` : ''}
           </Text>
         </TouchableOpacity>
       )}
 
-      {!indexReady && getIndexSize() > 0 && (
+      {/* Progress banner only shows while loading, hides when done */}
+      {!indexReady && getIndexSize() > 0 && getIndexSize() < 1025 && (
         <View style={styles.progressBanner}>
           <Text style={styles.progressText}>
             Loading Pokemon database... {getIndexSize()}/1025
@@ -387,12 +494,13 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
             numColumns={2}
             contentContainerStyle={styles.listContainer}
             ListEmptyComponent={
-              (searchQuery || selectedType !== 'all') && !isSearching ? 
+              (searchQuery || selectedType !== 'all' || selectedGeneration !== 'all') && !isSearching ? 
                 <Text style={styles.emptyText}>No Pokemon found</Text> : 
                 null
             }
           />
           
+          {/* Pagination for regular browsing */}
           {!searchQuery && selectedType === 'all' && (
             <View style={styles.pagination}>
               <TouchableOpacity 
@@ -409,6 +517,39 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
                 style={[styles.pageButton, currentPage === totalPages && styles.pageButtonDisabled]}
                 onPress={() => goToPage(currentPage + 1)}
                 disabled={currentPage === totalPages}
+              >
+                <Text style={styles.pageButtonText}>Next →</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Pagination for search/type/generation filter results - only show if more than page size */}
+          {(searchQuery || selectedType !== 'all' || selectedGeneration !== 'all') && allSearchResults.length > 0 && 
+           allSearchResults.length > ((selectedType !== 'all' || selectedGeneration !== 'all') ? TYPE_FILTER_PAGE_SIZE : 20) && (
+            <View style={styles.pagination}>
+              <TouchableOpacity 
+                style={[styles.pageButton, searchPage === 1 && styles.pageButtonDisabled]}
+                onPress={() => setSearchPage(prev => Math.max(1, prev - 1))}
+                disabled={searchPage === 1}
+              >
+                <Text style={styles.pageButtonText}>← Prev</Text>
+              </TouchableOpacity>
+              
+              <Text style={styles.pageInfo}>
+                Page {searchPage} of {Math.ceil(allSearchResults.length / ((selectedType !== 'all' || selectedGeneration !== 'all') ? TYPE_FILTER_PAGE_SIZE : 20))} 
+                {' '}({allSearchResults.length} total)
+              </Text>
+              
+              <TouchableOpacity 
+                style={[
+                  styles.pageButton, 
+                  searchPage >= Math.ceil(allSearchResults.length / ((selectedType !== 'all' || selectedGeneration !== 'all') ? TYPE_FILTER_PAGE_SIZE : 20)) && styles.pageButtonDisabled
+                ]}
+                onPress={() => {
+                  const maxPage = Math.ceil(allSearchResults.length / ((selectedType !== 'all' || selectedGeneration !== 'all') ? TYPE_FILTER_PAGE_SIZE : 20));
+                  setSearchPage(prev => Math.min(maxPage, prev + 1));
+                }}
+                disabled={searchPage >= Math.ceil(allSearchResults.length / ((selectedType !== 'all' || selectedGeneration !== 'all') ? TYPE_FILTER_PAGE_SIZE : 20))}
               >
                 <Text style={styles.pageButtonText}>Next →</Text>
               </TouchableOpacity>
@@ -452,6 +593,47 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
             <TouchableOpacity
               style={styles.modalCloseButton}
               onPress={() => setShowTypeModal(false)}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showGenerationModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowGenerationModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Generation</Text>
+            <ScrollView style={styles.typeList}>
+              {POKEMON_GENERATIONS.map((gen) => (
+                <TouchableOpacity
+                  key={gen.value}
+                  style={[
+                    styles.typeOption,
+                    selectedGeneration === gen.value && styles.typeOptionSelected
+                  ]}
+                  onPress={() => {
+                    setSelectedGeneration(gen.value);
+                    setShowGenerationModal(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.typeOptionText,
+                    selectedGeneration === gen.value && styles.typeOptionTextSelected
+                  ]}>
+                    {gen.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowGenerationModal(false)}
             >
               <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
