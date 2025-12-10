@@ -229,7 +229,14 @@ export const AR3DScreen: React.FC = () => {
 
   const spawnPokemon = async () => {
     try {
+      console.log('Spawning Pokemon...');
       const pokemonData = await pokeAPI.getRandomPokemon();
+      console.log('Pokemon data received:', pokemonData.name, pokemonData.sprites?.front_default);
+      
+      if (!pokemonData || !pokemonData.sprites?.front_default) {
+        Alert.alert('Error', 'Failed to load Pokemon data. Please try again.');
+        return;
+      }
       
       const baseX = Math.random() * (width - 100);
       const baseY = Math.random() * (height - 200) + 100;
@@ -247,14 +254,18 @@ export const AR3DScreen: React.FC = () => {
       };
       
       setPokemon(prev => [...prev, newPokemon]);
-      console.log('Spawned AR Pokemon:', newPokemon.name);
+      console.log('Spawned AR Pokemon:', newPokemon.name, 'at position', baseX, baseY);
       
       setTimeout(() => {
         setPokemon(prev => prev.filter(p => p.id !== newPokemon.id));
       }, 10000);
       
-    } catch (error) {
-      console.log('Failed to spawn Pokemon:', error);
+    } catch (error: any) {
+      console.error('Failed to spawn Pokemon:', error);
+      Alert.alert(
+        'Error', 
+        `Failed to spawn Pokemon: ${error.message || 'Network error'}. Please check your connection and try again.`
+      );
     }
   };
 

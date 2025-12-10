@@ -14,21 +14,36 @@
       },
       "oauth_client": [
         {
-          "client_id": "1060774015394-placeholder.apps.googleusercontent.com",
+          "client_id": "1060774015394-p90mbcanjkaeqrctg78jlbocmur0qjag.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pokeexplorer",
+            "certificate_hash": "2976324a30b6c94a11c20f109cd21a1334effea1"
+          }
+        },
+        {
+          "client_id": "1060774015394-diitt134tfleu3krfo7tjrir6tdiugul.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyCnRv9Qzu9uPbwTHaIFlSuoxyEPExg5vL0"
+          "current_key": "AIzaSyCObFPkAmwG39LWaUKrQNCYmFO1GEe4YmY"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "1060774015394-placeholder.apps.googleusercontent.com",
+              "client_id": "1060774015394-diitt134tfleu3krfo7tjrir6tdiugul.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "1060774015394-iiiu3lltll99j2rfsf636bsihc3dn8kk.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "labubumatchalatte.pokeexplorer"
+              }
             }
           ]
         }

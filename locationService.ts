@@ -12,7 +12,7 @@ export class LocationService {
       // Wait for Activity to be ready on Android
       if (Platform.OS === 'android') {
         // Use setTimeout instead of deprecated InteractionManager
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 200));
       }
       
       const permission: Permission = Platform.OS === 'ios' 
@@ -229,9 +229,9 @@ export class LocationService {
         particles: ['🌸', '🦋', '🌺'],
         description: 'Common areas',
       },
-    };
+    } as const;
     
-    return configs[biome] || configs.normal;
+    return configs[biome as keyof typeof configs] || configs.normal;
   }
 }
 

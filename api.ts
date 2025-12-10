@@ -1,19 +1,54 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pokemon } from './types';
 
-const BASE_URL = 'https://pokeapi.co/api/v2';
+// Base URL - will try domain first, then IP as fallback
+const BASE_URL_DOMAIN = 'https://pokeapi.co/api/v2';
+const BASE_URL_IP = 'https://172.67.195.193/api/v2'; // Fallback IP (may need updating)
+const FETCH_TIMEOUT = 15000; // 15 seconds
+
+// Helper to get base URL - tries domain first
+const getBaseUrl = () => BASE_URL_DOMAIN;
+
+// Helper function to add timeout to fetch
+const fetchWithTimeout = (url: string, options: RequestInit = {}, timeout = FETCH_TIMEOUT): Promise<Response> => {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('Request timeout'));
+    }, timeout);
+
+    fetch(url, options)
+      .then(response => {
+        clearTimeout(timer);
+        resolve(response);
+      })
+      .catch(error => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+};
 
 class PokeAPI {
   private cache = new Map<string, any>();
   private cacheLoaded = false;
   private readonly MAX_CACHE_SIZE = 400;
 
-  private xhrRequest(url: string): Promise<any> {
+  private xhrRequest(url: string, useIP = false): Promise<any> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('GET', url, true);
       xhr.setRequestHeader('Accept', 'application/json');
-      xhr.timeout = 10000;
+      xhr.setRequestHeader('User-Agent', 'PokeExplorer/1.0');
+      // When using IP address, set Host header for SNI (if possible)
+      if (useIP) {
+        try {
+          // Note: Some browsers/React Native may not allow setting Host header
+          // This is a limitation we work around by fixing DNS instead
+        } catch (e) {
+          // Host header setting may fail, that's okay
+        }
+      }
+      xhr.timeout = 20000; // Increased to 20 seconds
       
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -28,21 +63,53 @@ class PokeAPI {
         }
       };
       
-      xhr.onerror = () => reject(new Error('Network request failed'));
-      xhr.ontimeout = () => reject(new Error('Request timeout'));
+      xhr.onerror = (error) => {
+        const errorDetails = {
+          readyState: xhr.readyState,
+          status: xhr.status,
+          statusText: xhr.statusText,
+          responseText: xhr.responseText?.substring(0, 200)
+        };
+        console.error('XHR error details:', errorDetails);
+        
+        // Check for DNS resolution errors
+        const errorText = xhr.responseText || '';
+        if (errorText.includes('Unable to resolve host') || 
+            errorText.includes('No address associated with hostname') ||
+            errorText.includes('getaddrinfo failed') ||
+            xhr.status === 0) {
+          reject(new Error('DNS_RESOLUTION_FAILED'));
+        } else {
+          reject(new Error(`Network request failed: ${xhr.statusText || errorText || 'Unknown error'}`));
+        }
+      };
       
-      xhr.send();
+      xhr.ontimeout = () => {
+        console.error('XHR timeout for URL:', url);
+        reject(new Error('Request timeout'));
+      };
+      
+      try {
+        xhr.send();
+      } catch (error: any) {
+        reject(new Error(`Failed to send request: ${error.message}`));
+      }
     });
   }
 
   async testConnection(): Promise<boolean> {
     try {
       console.log('Testing connection with simple fetch');
-      const response = await fetch('https://pokeapi.co/api/v2/pokemon/1');
+      const response = await fetchWithTimeout('https://pokeapi.co/api/v2/pokemon/1', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
       console.log('Response received:', response.status);
       return response.ok;
-    } catch (error) {
-      console.error('Connection test failed:', error);
+    } catch (error: any) {
+      console.error('Connection test failed:', error.message);
       return false;
     }
   }
@@ -80,18 +147,74 @@ class PokeAPI {
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const response = await fetch(`${BASE_URL}/pokemon/${id}`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
+        console.log(`Fetching Pokemon ${id} (attempt ${attempt}/${retries})...`);
         
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Try XMLHttpRequest first (more reliable on Android emulator)
+        let pokemon;
+        let lastError: any = null;
+        
+        // Try domain first
+        const urlsToTry = [
+          `${BASE_URL_DOMAIN}/pokemon/${id}`,
+          `${BASE_URL_IP}/pokemon/${id}` // Fallback to IP if DNS fails
+        ];
+        
+        for (let urlIndex = 0; urlIndex < urlsToTry.length; urlIndex++) {
+          const url = urlsToTry[urlIndex];
+          const isIP = url.includes('172.67');
+          try {
+            console.log(`Attempting XHR request to: ${url} (${isIP ? 'IP fallback' : 'domain'})`);
+            const xhrResponse = await this.xhrRequest(url, isIP);
+            pokemon = await xhrResponse.json();
+            console.log(`Successfully fetched Pokemon ${id} via XHR from ${isIP ? 'IP' : 'domain'}`);
+            break; // Success, exit loop
+          } catch (xhrError: any) {
+            console.log(`XHR failed for ${url}: ${xhrError.message}`);
+            lastError = xhrError;
+            
+            // If DNS error and we haven't tried IP yet, continue to next URL
+            if (xhrError.message === 'DNS_RESOLUTION_FAILED' || 
+                xhrError.message?.includes('Unable to resolve host') || 
+                xhrError.message?.includes('DNS resolution failed') ||
+                xhrError.message?.includes('No address associated with hostname')) {
+              if (urlIndex < urlsToTry.length - 1) {
+                console.log('DNS resolution failed, trying IP address fallback...');
+                continue; // Try IP address next
+              } else {
+                // Last URL failed, throw DNS error with helpful message
+                throw new Error('DNS resolution failed. The Android emulator cannot resolve "pokeapi.co". Please fix DNS settings:\n1. Open Android Studio > AVD Manager\n2. Click the dropdown next to your emulator > "Cold Boot Now"\n3. Or set DNS to 8.8.8.8 in emulator settings');
+              }
+            }
+            
+            // For other errors, try fetch as fallback
+            try {
+              console.log(`Trying fetch for: ${url}`);
+              const response = await fetchWithTimeout(url, {
+                method: 'GET',
+                headers: {
+                  'Accept': 'application/json',
+                  'User-Agent': 'PokeExplorer/1.0',
+                },
+              });
+              
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+              
+              pokemon = await response.json();
+              console.log(`Successfully fetched Pokemon ${id} via fetch from ${url.includes('172.67') ? 'IP' : 'domain'}`);
+              break; // Success, exit loop
+            } catch (fetchError: any) {
+              console.log(`Fetch also failed for ${url}: ${fetchError.message}`);
+              lastError = fetchError;
+              continue; // Try next URL
+            }
+          }
         }
         
-        const pokemon = await response.json();
+        if (!pokemon) {
+          throw new Error(`Failed to fetch Pokemon ${id} after trying all methods: ${lastError?.message || 'Unknown error'}`);
+        }
         
         this.cache.set(cacheKey, pokemon);
         
@@ -110,7 +233,7 @@ class PokeAPI {
           throw new Error(`Failed to fetch Pokemon ${id} after ${retries} attempts: ${error.message}`);
         }
         // Wait before retrying (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 1000 * attempt));
       }
     }
     
@@ -160,21 +283,88 @@ class PokeAPI {
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const response = await fetch(`${BASE_URL}/pokemon/${name}`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
+        console.log(`Fetching Pokemon ${name} (attempt ${attempt}/${retries})...`);
         
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error(`Pokemon ${name} not found`);
+        // Try XMLHttpRequest first (more reliable on Android emulator)
+        let pokemon;
+        let lastError: any = null;
+        
+        // Try domain first, then IP as fallback
+        const urlsToTry = [
+          `${BASE_URL_DOMAIN}/pokemon/${name}`,
+          `${BASE_URL_IP}/pokemon/${name}` // Fallback to IP if DNS fails
+        ];
+        
+        for (let urlIndex = 0; urlIndex < urlsToTry.length; urlIndex++) {
+          const url = urlsToTry[urlIndex];
+          const isIP = url.includes('172.67');
+          try {
+            console.log(`Attempting XHR request to: ${url} (${isIP ? 'IP fallback' : 'domain'})`);
+            const xhrResponse = await this.xhrRequest(url, isIP);
+            pokemon = await xhrResponse.json();
+            console.log(`Successfully fetched Pokemon ${name} via XHR from ${isIP ? 'IP' : 'domain'}`);
+            break; // Success, exit loop
+          } catch (xhrError: any) {
+            console.log(`XHR failed for ${url}: ${xhrError.message}`);
+            lastError = xhrError;
+            
+            // If DNS error and we haven't tried IP yet, continue to next URL
+            if (xhrError.message === 'DNS_RESOLUTION_FAILED' || 
+                xhrError.message?.includes('Unable to resolve host') || 
+                xhrError.message?.includes('DNS resolution failed') ||
+                xhrError.message?.includes('No address associated with hostname')) {
+              if (urlIndex < urlsToTry.length - 1) {
+                console.log('DNS resolution failed, trying IP address fallback...');
+                continue; // Try IP address next
+              } else {
+                // Last URL failed, throw DNS error with helpful message
+                throw new Error('DNS resolution failed. The Android emulator cannot resolve "pokeapi.co". Please fix DNS settings:\n1. Open Android Studio > AVD Manager\n2. Click the dropdown next to your emulator > "Cold Boot Now"\n3. Or set DNS to 8.8.8.8 in emulator settings');
+              }
+            }
+            
+            // For other errors, try fetch as fallback
+            try {
+              console.log(`Trying fetch for: ${url}`);
+              const response = await fetchWithTimeout(url, {
+                method: 'GET',
+                headers: {
+                  'Accept': 'application/json',
+                  'User-Agent': 'PokeExplorer/1.0',
+                },
+              });
+              
+              if (!response.ok) {
+                if (response.status === 404) {
+                  throw new Error(`Pokemon ${name} not found`);
+                }
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+              
+              pokemon = await response.json();
+              console.log(`Successfully fetched Pokemon ${name} via fetch from ${isIP ? 'IP' : 'domain'}`);
+              break; // Success, exit loop
+            } catch (fetchError: any) {
+              console.log(`Fetch also failed for ${url}: ${fetchError.message}`);
+              lastError = fetchError;
+              
+              // If 404, that's a valid error (Pokemon not found)
+              if (fetchError.message.includes('not found') || fetchError.message.includes('404')) {
+                throw new Error(`Pokemon ${name} not found`);
+              }
+              
+              if (urlIndex < urlsToTry.length - 1) {
+                continue; // Try next URL
+              } else {
+                // Both URLs failed
+                throw new Error(`Failed to fetch Pokemon ${name} after trying all methods: ${lastError?.message || 'Unknown error'}`);
+              }
+            }
           }
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        const pokemon = await response.json();
+        if (!pokemon) {
+          throw new Error(`Failed to fetch Pokemon ${name} after trying all methods: ${lastError?.message || 'Unknown error'}`);
+        }
         
         this.cache.set(cacheKey, pokemon);
         
@@ -193,7 +383,7 @@ class PokeAPI {
           throw error;
         }
         // Wait before retrying (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 1000 * attempt));
       }
     }
     
