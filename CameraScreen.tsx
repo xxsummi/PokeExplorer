@@ -7,6 +7,7 @@ import {
   Alert,
   Image,
   Platform,
+  Linking,
 } from 'react-native';
 import { Camera, useCameraDevice } from 'react-native-vision-camera';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
@@ -16,6 +17,7 @@ import { pokeAPI } from './api';
 
 export const CameraScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState(false);
+  const [isRequesting, setIsRequesting] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [overlayPokemon, setOverlayPokemon] = useState<any>(null);
@@ -24,25 +26,65 @@ export const CameraScreen: React.FC = () => {
   const dispatch = useDispatch();
 
   React.useEffect(() => {
-    requestCameraPermission();
+    // Delay permission request to ensure Activity is ready
+    const timer = setTimeout(() => {
+      requestCameraPermission();
+    }, 200);
+    return () => clearTimeout(timer);
   }, []);
 
   React.useEffect(() => {
     if (hasPermission) {
       setIsActive(true);
+      console.log('Camera permission granted, activating camera');
+      console.log('Camera device:', device ? 'Found' : 'Not found');
     }
-  }, [hasPermission]);
+  }, [hasPermission, device]);
 
   const requestCameraPermission = async () => {
+    if (isRequesting) return; // Prevent multiple simultaneous requests
+    
+    setIsRequesting(true);
     try {
+      // Wait for Activity to be ready on Android
+      if (Platform.OS === 'android') {
+        // Use setTimeout instead of deprecated InteractionManager
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
       const permission = Platform.OS === 'ios' 
         ? PERMISSIONS.IOS.CAMERA
         : PERMISSIONS.ANDROID.CAMERA;
       
+      console.log('Requesting camera permission...');
       const result = await request(permission);
+      console.log('Permission result:', result);
+      
       setHasPermission(result === RESULTS.GRANTED);
+      
+      if (result === RESULTS.DENIED) {
+        Alert.alert(
+          'Permission Denied',
+          'Camera permission was denied. Please grant permission to use the camera.',
+          [{ text: 'OK' }]
+        );
+      } else if (result === RESULTS.BLOCKED) {
+        Alert.alert(
+          'Permission Blocked',
+          'Camera permission is blocked. Please enable it in Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => {
+              Linking.openSettings();
+            }},
+          ]
+        );
+      }
     } catch (error) {
-      console.log('Camera permission error:', error);
+      console.error('Camera permission error:', error);
+      Alert.alert('Error', `Failed to request camera permission: ${error}`);
+    } finally {
+      setIsRequesting(false);
     }
   };
 
@@ -95,19 +137,33 @@ export const CameraScreen: React.FC = () => {
     return (
       <View style={styles.permissionContainer}>
         <Text style={styles.permissionText}>Camera permission is required</Text>
-        <TouchableOpacity style={styles.button} onPress={requestCameraPermission}>
-          <Text style={styles.buttonText}>Grant Permission</Text>
+        <TouchableOpacity 
+          style={[styles.button, isRequesting && styles.buttonDisabled]} 
+          onPress={requestCameraPermission}
+          disabled={isRequesting}
+        >
+          <Text style={styles.buttonText}>
+            {isRequesting ? 'Requesting...' : 'Grant Permission'}
+          </Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  if (!device) {
+  if (!device && hasPermission) {
     return (
       <View style={styles.permissionContainer}>
         <Text style={styles.permissionText}>No camera device found</Text>
-        <Text style={styles.permissionSubtext}>Make sure camera permissions are granted</Text>
-        <TouchableOpacity style={styles.button} onPress={requestCameraPermission}>
+        <Text style={styles.permissionSubtext}>
+          Camera permission is granted but no camera device was detected.{'\n'}
+          Make sure your device has a camera and try restarting the app.
+        </Text>
+        <TouchableOpacity style={styles.button} onPress={() => {
+          console.log('Retrying camera device detection...');
+          // Force re-render by toggling isActive
+          setIsActive(false);
+          setTimeout(() => setIsActive(true), 100);
+        }}>
           <Text style={styles.buttonText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -127,6 +183,24 @@ export const CameraScreen: React.FC = () => {
     );
   }
 
+  // Debug logging
+  React.useEffect(() => {
+    console.log('Camera state:', {
+      hasPermission,
+      isActive,
+      device: device ? device.id : 'null',
+      deviceName: device?.name,
+    });
+  }, [hasPermission, isActive, device]);
+
+  if (!device) {
+    return (
+      <View style={styles.permissionContainer}>
+        <Text style={styles.permissionText}>Loading camera...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Camera
@@ -135,6 +209,7 @@ export const CameraScreen: React.FC = () => {
         device={device}
         isActive={isActive}
         photo={true}
+        enableZoomGesture={true}
       />
       
       {overlayPokemon && (
@@ -278,6 +353,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
+  },
+  buttonDisabled: {
+    backgroundColor: '#999',
+    opacity: 0.6,
   },
   buttonText: {
     color: '#fff',

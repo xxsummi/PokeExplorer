@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,10 @@ import {
   Dimensions,
   Image,
   PanResponder,
+  Platform,
+  Linking,
 } from 'react-native';
+import { Camera, useCameraDevice } from 'react-native-vision-camera';
 
 import { useDispatch } from 'react-redux';
 import { addDiscoveredPokemon } from './store';
@@ -109,14 +112,30 @@ const Pokemon3DComponent: React.FC<{ pokemon: Pokemon3D; onCatch: () => void }> 
 
 export const AR3DScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState(false);
+  const [isRequesting, setIsRequesting] = useState(false);
   const [pokemon, setPokemon] = useState<Pokemon3D[]>([]);
   const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
+  const [isActive, setIsActive] = useState(true);
+  const device = useCameraDevice('back');
+  const camera = useRef<Camera>(null);
 
   const dispatch = useDispatch();
 
   useEffect(() => {
-    requestCameraPermission();
+    // Delay permission request to ensure Activity is ready
+    const timer = setTimeout(() => {
+      requestCameraPermission();
+    }, 200);
+    return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (hasPermission) {
+      setIsActive(true);
+      console.log('Camera permission granted, activating camera');
+      console.log('Camera device:', device ? 'Found' : 'Not found');
+    }
+  }, [hasPermission, device]);
 
   const panResponder = PanResponder.create({
     onMoveShouldSetPanResponder: () => true,
@@ -162,8 +181,50 @@ export const AR3DScreen: React.FC = () => {
   });
 
   const requestCameraPermission = async () => {
-    const result = await request(PERMISSIONS.ANDROID.CAMERA);
-    setHasPermission(result === RESULTS.GRANTED);
+    if (isRequesting) return; // Prevent multiple simultaneous requests
+    
+    setIsRequesting(true);
+    try {
+      // Wait for Activity to be ready on Android
+      if (Platform.OS === 'android') {
+        // Use setTimeout instead of deprecated InteractionManager
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
+      const permission = Platform.OS === 'ios' 
+        ? PERMISSIONS.IOS.CAMERA
+        : PERMISSIONS.ANDROID.CAMERA;
+      
+      console.log('Requesting camera permission...');
+      const result = await request(permission);
+      console.log('Permission result:', result);
+      
+      setHasPermission(result === RESULTS.GRANTED);
+      
+      if (result === RESULTS.DENIED) {
+        Alert.alert(
+          'Permission Denied',
+          'Camera permission was denied. Please grant permission to use AR features.',
+          [{ text: 'OK' }]
+        );
+      } else if (result === RESULTS.BLOCKED) {
+        Alert.alert(
+          'Permission Blocked',
+          'Camera permission is blocked. Please enable it in Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => {
+              Linking.openSettings();
+            }},
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Camera permission error:', error);
+      Alert.alert('Error', `Failed to request camera permission: ${error}`);
+    } finally {
+      setIsRequesting(false);
+    }
   };
 
   const spawnPokemon = async () => {
@@ -218,16 +279,38 @@ export const AR3DScreen: React.FC = () => {
       <View style={styles.container}>
         <Text style={styles.title}>AR Pokemon</Text>
         <Text style={styles.description}>Camera permission required for AR Pokemon experience</Text>
-        <TouchableOpacity style={styles.startButton} onPress={requestCameraPermission}>
-          <Text style={styles.buttonText}>Grant Permission</Text>
+        <TouchableOpacity 
+          style={[styles.startButton, isRequesting && styles.buttonDisabled]} 
+          onPress={requestCameraPermission}
+          disabled={isRequesting}
+        >
+          <Text style={styles.buttonText}>
+            {isRequesting ? 'Requesting...' : 'Grant Permission'}
+          </Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!device) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>AR Pokemon</Text>
+        <Text style={styles.description}>No camera device found. Please check your device has a camera.</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.arContainer} {...panResponder.panHandlers}>
-      <View style={styles.camera} />
+      <Camera
+        ref={camera}
+        style={styles.camera}
+        device={device}
+        isActive={isActive}
+        photo={true}
+        enableZoomGesture={true}
+      />
       
       {pokemon.map((poke) => (
         <Pokemon3DComponent
@@ -272,6 +355,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 25,
+  },
+  buttonDisabled: {
+    backgroundColor: '#999',
+    opacity: 0.6,
   },
   arContainer: {
     flex: 1,

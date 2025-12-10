@@ -4,6 +4,12 @@ import { request, check, PERMISSIONS, RESULTS, openSettings } from 'react-native
 export class PermissionManager {
   static async requestLocationPermission(): Promise<boolean> {
     try {
+      // Wait for Activity to be ready on Android
+      if (Platform.OS === 'android') {
+        // Use setTimeout instead of deprecated InteractionManager
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
       const permission = Platform.OS === 'ios' 
         ? PERMISSIONS.IOS.LOCATION_WHEN_IN_USE
         : PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION;
@@ -41,6 +47,12 @@ export class PermissionManager {
 
   static async requestCameraPermission(): Promise<boolean> {
     try {
+      // Wait for Activity to be ready on Android
+      if (Platform.OS === 'android') {
+        // Use setTimeout instead of deprecated InteractionManager
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
       const permission = Platform.OS === 'ios' 
         ? PERMISSIONS.IOS.CAMERA
         : PERMISSIONS.ANDROID.CAMERA;
@@ -78,6 +90,12 @@ export class PermissionManager {
 
   static async requestMicrophonePermission(): Promise<boolean> {
     try {
+      // Wait for Activity to be ready on Android
+      if (Platform.OS === 'android') {
+        // Use setTimeout instead of deprecated InteractionManager
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
       const permission = Platform.OS === 'ios' 
         ? PERMISSIONS.IOS.MICROPHONE
         : PERMISSIONS.ANDROID.RECORD_AUDIO;

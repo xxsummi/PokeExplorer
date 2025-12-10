@@ -9,6 +9,12 @@ export class LocationService {
 
   async requestLocationPermission(): Promise<boolean> {
     try {
+      // Wait for Activity to be ready on Android
+      if (Platform.OS === 'android') {
+        // Use setTimeout instead of deprecated InteractionManager
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
       const permission: Permission = Platform.OS === 'ios' 
         ? PERMISSIONS.IOS.LOCATION_WHEN_IN_USE
         : PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION;

@@ -110,13 +110,30 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
       const start = (page - 1) * POKEMON_PER_PAGE + 1;
       const end = Math.min(start + POKEMON_PER_PAGE - 1, TOTAL_POKEMON);
       const pokemon: Pokemon[] = [];
+      const errors: string[] = [];
       
+      // Load Pokemon with individual error handling
       for (let i = start; i <= end; i++) {
-        const poke = await pokeAPI.getPokemon(i);
-        pokemon.push(poke);
+        try {
+          const poke = await pokeAPI.getPokemon(i);
+          pokemon.push(poke);
+        } catch (error: any) {
+          console.log(`Error loading Pokemon ${i}:`, error.message);
+          errors.push(`Pokemon ${i}`);
+          // Continue loading other Pokemon even if one fails
+        }
       }
-      setPageData(pokemon);
-    } catch (error) {
+      
+      if (pokemon.length > 0) {
+        setPageData(pokemon);
+      } else {
+        console.log('Failed to load any Pokemon for this page');
+        // Show error message if all Pokemon failed to load
+        if (errors.length > 0) {
+          console.log('Failed Pokemon IDs:', errors.join(', '));
+        }
+      }
+    } catch (error: any) {
       console.log('Error loading page:', error);
     } finally {
       setLoadingPage(false);
