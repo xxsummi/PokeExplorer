@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# PokeExplorer
-=======
 # PokeExplorer 🔍⚡
 
 An interactive, augmented reality-enhanced Pokédex built with React Native. Discover, catalog, and share Pokémon in real-world contexts using geolocation, AR overlays, and device sensors.
@@ -223,6 +220,94 @@ npm run test:coverage
    - Ensure all required permissions are granted in device settings
    - Check Firebase configuration files are properly placed
 
+### Network/DNS Issues (Android Emulator)
+
+#### Problem: API Calls Fail with "Unable to resolve host" or "DNS resolution failed"
+
+**Symptoms:**
+- Pokémon data doesn't load in the Pokédex
+- Error messages like: `Unable to resolve host "pokeapi.co": No address associated with hostname`
+- Network requests fail even though internet connectivity works (ping to 8.8.8.8 succeeds)
+
+**Root Cause:**
+Android emulators sometimes have DNS resolution issues where they can't resolve domain names to IP addresses, even though basic network connectivity works.
+
+**Diagnosis:**
+1. Test if the API works from your host machine:
+   ```bash
+   curl https://pokeapi.co/api/v2/pokemon/1
+   ```
+   If this works, the issue is with the emulator's DNS.
+
+2. Test DNS resolution in the emulator:
+   ```bash
+   adb shell ping -c 1 8.8.8.8  # Should work (basic connectivity)
+   adb shell ping -c 1 pokeapi.co  # May fail (DNS issue)
+   ```
+
+**Solutions (try in order):**
+
+1. **Cold Boot the Emulator (Recommended)**
+   - Open Android Studio
+   - Go to **AVD Manager** (Tools → Device Manager)
+   - Click the dropdown arrow next to your emulator
+   - Select **"Cold Boot Now"**
+   - This resets network settings and often fixes DNS issues
+
+2. **Restart Emulator with DNS Configuration**
+   ```bash
+   # Stop current emulator
+   adb -s emulator-5554 emu kill
+   
+   # Start with Google DNS
+   emulator -avd <your_avd_name> -dns-server 8.8.8.8,8.8.4.4
+   ```
+   Replace `<your_avd_name>` with your actual AVD name (e.g., `Pixel_9_Pro_XL`)
+
+3. **Configure DNS in Emulator Settings**
+   - Open Settings in the emulator
+   - Go to **Network & Internet → Wi‑Fi**
+   - Long-press the connected network
+   - Select **Modify network → Advanced options**
+   - Set DNS 1: `8.8.8.8`
+   - Set DNS 2: `8.8.4.4`
+   - Save and restart the app
+
+4. **Check Network Security Configuration**
+   - Ensure `android/app/src/main/res/xml/network_security_config.xml` exists
+   - Verify `AndroidManifest.xml` includes:
+     ```xml
+     <application
+       android:networkSecurityConfig="@xml/network_security_config"
+       ...>
+     ```
+
+**What We Implemented:**
+
+The app includes several fallback mechanisms to handle network issues:
+
+1. **Automatic Retry Logic**: API calls retry up to 3 times with exponential backoff
+2. **Multiple Request Methods**: Tries XMLHttpRequest first, then falls back to fetch
+3. **DNS Error Detection**: Identifies DNS failures and provides helpful error messages
+4. **IP Address Fallback**: Attempts to use IP address directly if DNS fails (though HTTPS with IP has limitations)
+5. **Timeout Handling**: 15-20 second timeouts prevent hanging requests
+6. **Graceful Degradation**: App continues to work even if some Pokémon fail to load
+
+**Code Implementation:**
+- `api.ts`: Contains retry logic, timeout handling, and DNS error detection
+- Network security config allows cleartext traffic and trusts pokeapi.co domain
+- Error messages guide users to fix DNS issues
+
+**Verification:**
+After applying a fix, test by:
+```bash
+# Check DNS in emulator
+adb shell getprop net.dns1
+
+# Test API call from app
+# Open Pokédex screen and verify Pokémon load correctly
+```
+
 ### Performance Tips
 - Enable Hermes for better performance
 - Use release builds for testing on physical devices
@@ -250,4 +335,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 **Happy Pokémon Hunting! 🎯⚡**
->>>>>>> feature/AugmentedReality
