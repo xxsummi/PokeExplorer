@@ -1,5 +1,17 @@
+/**
+ * PokeAPI Service
+ * 
+ * Handles all interactions with the PokeAPI (https://pokeapi.co/)
+ * Features:
+ * - Automatic retry logic with exponential backoff
+ * - DNS fallback mechanism for Android emulator issues
+ * - Offline caching with AsyncStorage
+ * - Type-based Pokemon filtering
+ * - Request timeout handling
+ */
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Pokemon } from './types';
+import { Pokemon } from '../types';
 
 // Base URL - will try domain first, then IP as fallback
 const BASE_URL_DOMAIN = 'https://pokeapi.co/api/v2';
@@ -418,6 +430,113 @@ class PokeAPI {
   async getRandomPokemon(): Promise<Pokemon> {
     const randomId = Math.floor(Math.random() * 150) + 1; // First 150 Pokemon
     return this.getPokemon(randomId);
+  }
+
+  async getPokemonByType(type: string, retries = 3): Promise<Pokemon[]> {
+    await this.loadCacheFromStorage();
+    
+    const cacheKey = `type_${type}`;
+    
+    // Check cache first
+    if (this.cache.has(cacheKey)) {
+      const cachedIds = this.cache.get(cacheKey);
+      const pokemon: Pokemon[] = [];
+      for (const id of cachedIds) {
+        const pokemonKey = `pokemon_${id}`;
+        if (this.cache.has(pokemonKey)) {
+          pokemon.push(this.cache.get(pokemonKey));
+        }
+      }
+      if (pokemon.length > 0) {
+        return pokemon;
+      }
+    }
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`Fetching Pokemon by type ${type} (attempt ${attempt}/${retries})...`);
+        
+        const urlsToTry = [
+          `${BASE_URL_DOMAIN}/type/${type}`,
+          `${BASE_URL_IP}/type/${type}`
+        ];
+        
+        let typeData: any = null;
+        let lastError: any = null;
+        
+        for (let urlIndex = 0; urlIndex < urlsToTry.length; urlIndex++) {
+          const url = urlsToTry[urlIndex];
+          const isIP = url.includes('172.67');
+          try {
+            const xhrResponse = await this.xhrRequest(url, isIP);
+            typeData = await xhrResponse.json();
+            break;
+          } catch (xhrError: any) {
+            lastError = xhrError;
+            if (xhrError.message === 'DNS_RESOLUTION_FAILED' || 
+                xhrError.message?.includes('Unable to resolve host')) {
+              if (urlIndex < urlsToTry.length - 1) {
+                continue;
+              }
+            }
+            try {
+              const response = await fetchWithTimeout(url, {
+                method: 'GET',
+                headers: {
+                  'Accept': 'application/json',
+                  'User-Agent': 'PokeExplorer/1.0',
+                },
+              });
+              if (response.ok) {
+                typeData = await response.json();
+                break;
+              }
+            } catch (fetchError: any) {
+              lastError = fetchError;
+              if (urlIndex < urlsToTry.length - 1) {
+                continue;
+              }
+            }
+          }
+        }
+        
+        if (!typeData) {
+          throw new Error(`Failed to fetch type data: ${lastError?.message || 'Unknown error'}`);
+        }
+        
+        // Extract Pokemon IDs from the type data
+        const pokemonIds = typeData.pokemon?.map((p: any) => {
+          const urlParts = p.pokemon.url.split('/').filter((part: string) => part);
+          return parseInt(urlParts[urlParts.length - 1], 10);
+        }).filter((id: number) => !isNaN(id)) || [];
+        
+        // Cache the IDs
+        this.cache.set(cacheKey, pokemonIds);
+        
+        // Fetch Pokemon data (limit to first 50 for performance)
+        const pokemon: Pokemon[] = [];
+        const idsToFetch = pokemonIds.slice(0, 50);
+        
+        for (const id of idsToFetch) {
+          try {
+            const poke = await this.getPokemon(id);
+            pokemon.push(poke);
+          } catch (error) {
+            console.log(`Failed to fetch Pokemon ${id} for type ${type}`);
+          }
+        }
+        
+        return pokemon;
+      } catch (error: any) {
+        console.log(`Attempt ${attempt}/${retries} failed for type ${type}:`, error.message);
+        if (attempt === retries) {
+          throw new Error(`Failed to fetch Pokemon by type ${type} after ${retries} attempts: ${error.message}`);
+        }
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 1000 * attempt));
+      }
+    }
+    
+    throw new Error(`Failed to fetch Pokemon by type ${type}`);
   }
 
   getTypeColor(type: string): string {

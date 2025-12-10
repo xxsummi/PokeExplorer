@@ -1,5 +1,5 @@
 import auth from '@react-native-firebase/auth';
-import { User } from './types';
+import { User } from '../types';
 
 class AuthService {
   async signInWithEmailAndPassword(email: string, password: string): Promise<User> {

@@ -10,13 +10,14 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState, addPokemon, setLoading } from './store';
-import { pokeAPI } from './api';
-import { Pokemon } from './types';
-import { VoiceSearch } from './VoiceSearch';
-import { initializePokemonSearch, searchPokemon, suggestPokemon, isIndexReady, canSearch, getIndexSize } from './fuzzySearch';
+import { RootState, addPokemon, setLoading } from '../store';
+import { pokeAPI } from '../services/pokeAPI';
+import { Pokemon } from '../types';
+import { VoiceSearch } from '../components/VoiceSearch';
+import { initializePokemonSearch, searchPokemon, suggestPokemon, isIndexReady, canSearch, getIndexSize } from '../utils/fuzzySearch';
 
 interface PokedexScreenProps {
   onPokemonSelect: (pokemon: Pokemon) => void;
@@ -25,11 +26,19 @@ interface PokedexScreenProps {
 const POKEMON_PER_PAGE = 20;
 const TOTAL_POKEMON = 151;
 
+const POKEMON_TYPES = [
+  'all', 'normal', 'fire', 'water', 'electric', 'grass', 'ice', 
+  'fighting', 'poison', 'ground', 'flying', 'psychic', 'bug', 
+  'rock', 'ghost', 'dragon', 'dark', 'steel', 'fairy'
+];
+
 export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedType, setSelectedType] = useState<string>('all');
   const [searchResults, setSearchResults] = useState<Pokemon[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showVoiceSearch, setShowVoiceSearch] = useState(false);
+  const [showTypeModal, setShowTypeModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageData, setPageData] = useState<Pokemon[]>([]);
   const [loadingPage, setLoadingPage] = useState(false);
@@ -59,13 +68,13 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
   };
 
   useEffect(() => {
-    if (searchQuery) {
+    if (searchQuery || selectedType !== 'all') {
       performSearch();
     } else {
       setSearchResults([]);
       setSuggestions([]);
     }
-  }, [searchQuery, indexReady]);
+  }, [searchQuery, selectedType, indexReady]);
 
   // Poll index size and smart refresh results
   useEffect(() => {
@@ -149,52 +158,98 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
   };
 
   const performSearch = async () => {
-    if (!searchQuery.trim()) return;
-    
     setIsSearching(true);
-    const query = searchQuery.toLowerCase().replace(/\s+/g, '');
+    const query = searchQuery.toLowerCase().trim().replace(/\s+/g, '');
     
     try {
-      // Try direct ID match
-      if (!isNaN(Number(query))) {
-        const poke = await pokeAPI.getPokemon(Number(query));
-        setSearchResults([poke]);
-        setSuggestions([]);
-        setIsSearching(false);
-        return;
+      let results: Pokemon[] = [];
+      
+      // If type filter is selected, get Pokemon by type first
+      if (selectedType !== 'all') {
+        try {
+          const typeResults = await pokeAPI.getPokemonByType(selectedType);
+          results = typeResults;
+        } catch (error) {
+          console.log('Error fetching by type:', error);
+          setSearchResults([]);
+          setSuggestions([]);
+          setIsSearching(false);
+          return;
+        }
       }
       
-      // Try direct name match first
-      try {
-        const poke = await pokeAPI.getPokemonByName(query);
-        setSearchResults([poke]);
-        setSuggestions([]);
-        setIsSearching(false);
-        return;
-      } catch {}
-      
-      // Use fuzzy search with whatever is loaded
-      if (!canSearch()) {
-        // No Pokemon loaded yet - keep searching
-        return;
+      // If there's a search query, filter results
+      if (query) {
+        // Try direct ID match first
+        if (!isNaN(Number(query))) {
+          try {
+            const poke = await pokeAPI.getPokemon(Number(query));
+            // If type filter is active, check if Pokemon matches type
+            if (selectedType === 'all' || poke.types.some(t => t.type.name === selectedType)) {
+              setSearchResults([poke]);
+              setSuggestions([]);
+              setIsSearching(false);
+              return;
+            }
+          } catch (error) {
+            console.log('Pokemon not found by ID:', error);
+          }
+        }
+        
+        // Try direct name match
+        try {
+          const poke = await pokeAPI.getPokemonByName(query);
+          // If type filter is active, check if Pokemon matches type
+          if (selectedType === 'all' || poke.types.some(t => t.type.name === selectedType)) {
+            setSearchResults([poke]);
+            setSuggestions([]);
+            setIsSearching(false);
+            return;
+          }
+        } catch (error) {
+          // Name not found, continue to fuzzy search
+        }
+        
+        // Filter results by search query (name contains query)
+        if (results.length > 0) {
+          results = results.filter(p => 
+            p.name.toLowerCase().includes(query) || 
+            p.id.toString() === query
+          );
+        } else if (canSearch()) {
+          // Use fuzzy search if no type filter
+          const fuzzyResults = searchPokemon(query, 20);
+          results = fuzzyResults.map(r => r.entry.data);
+        }
       }
       
-      // Search with partial or full index
-      const results = searchPokemon(query, 5);
-      const allSuggestions = suggestPokemon(query, 15);
+      // Apply type filter to fuzzy search results if needed
+      if (selectedType !== 'all' && results.length > 0) {
+        results = results.filter(p => 
+          p.types.some(t => t.type.name === selectedType)
+        );
+      }
       
-      // Show top result as main result
-      setSearchResults(results.slice(0, 1).map(r => r.entry.data));
+      // Show results
+      setSearchResults(results.slice(0, 20));
       
-      // Show remaining results + additional suggestions as "Did you mean?"
-      const remainingResults = results.slice(1);
-      const additionalSuggestions = allSuggestions
-        .filter(s => !results.some(r => r.entry.id === s.entry.id));
-      
-      setSuggestions([
-        ...remainingResults.map(r => r.entry.data),
-        ...additionalSuggestions.map(s => s.entry.data)
-      ].slice(0, 10));
+      // Generate suggestions if we have a query
+      if (query && canSearch()) {
+        const allSuggestions = suggestPokemon(query, 15);
+        const filteredSuggestions = allSuggestions
+          .map(s => s.entry.data)
+          .filter(p => {
+            if (selectedType !== 'all') {
+              return p.types.some(t => t.type.name === selectedType);
+            }
+            return true;
+          })
+          .filter(p => !results.some(r => r.id === p.id))
+          .slice(0, 10);
+        setSuggestions(filteredSuggestions);
+      } else {
+        setSuggestions([]);
+      }
       
       setIsSearching(false);
     } catch (error) {
@@ -235,7 +290,7 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
     </TouchableOpacity>
   );
 
-  const displayData = searchQuery ? searchResults : pageData;
+  const displayData = (searchQuery || selectedType !== 'all') ? searchResults : pageData;
 
   return (
     <View style={styles.container}>
@@ -244,10 +299,21 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by name, ID, or type..."
+          placeholder="Search by name or ID..."
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
+        <TouchableOpacity 
+          style={[
+            styles.typeFilterButton,
+            selectedType !== 'all' && styles.typeFilterButtonActive
+          ]}
+          onPress={() => setShowTypeModal(true)}
+        >
+          <Text style={styles.typeFilterText}>
+            {selectedType === 'all' ? 'Type' : selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity 
           style={styles.voiceButton}
           onPress={() => {
@@ -258,6 +324,17 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
           <Text style={styles.voiceIcon}>🎤</Text>
         </TouchableOpacity>
       </View>
+      
+      {selectedType !== 'all' && (
+        <TouchableOpacity 
+          style={styles.clearFilterButton}
+          onPress={() => setSelectedType('all')}
+        >
+          <Text style={styles.clearFilterText}>
+            Clear type filter: {selectedType}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {!indexReady && getIndexSize() > 0 && (
         <View style={styles.progressBanner}>
@@ -310,13 +387,13 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
             numColumns={2}
             contentContainerStyle={styles.listContainer}
             ListEmptyComponent={
-              searchQuery && !isSearching ? 
+              (searchQuery || selectedType !== 'all') && !isSearching ? 
                 <Text style={styles.emptyText}>No Pokemon found</Text> : 
                 null
             }
           />
           
-          {!searchQuery && (
+          {!searchQuery && selectedType === 'all' && (
             <View style={styles.pagination}>
               <TouchableOpacity 
                 style={[styles.pageButton, currentPage === 1 && styles.pageButtonDisabled]}
@@ -339,6 +416,48 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
           )}
         </>
       )}
+      
+      <Modal
+        visible={showTypeModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowTypeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Type</Text>
+            <ScrollView style={styles.typeList}>
+              {POKEMON_TYPES.map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.typeOption,
+                    selectedType === type && styles.typeOptionSelected,
+                    type !== 'all' && { backgroundColor: pokeAPI.getTypeColor(type) + '40' }
+                  ]}
+                  onPress={() => {
+                    setSelectedType(type);
+                    setShowTypeModal(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.typeOptionText,
+                    selectedType === type && styles.typeOptionTextSelected
+                  ]}>
+                    {type === 'all' ? 'All Types' : type.charAt(0).toUpperCase() + type.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowTypeModal(false)}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       
       {showVoiceSearch && (
         <VoiceSearch 
@@ -540,5 +659,94 @@ const styles = StyleSheet.create({
     color: '#856404',
     fontSize: 13,
     fontWeight: '500',
+  },
+  typeFilterButton: {
+    backgroundColor: '#6c757d',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginRight: 10,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeFilterButtonActive: {
+    backgroundColor: '#2c5aa0',
+  },
+  typeFilterText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  clearFilterButton: {
+    backgroundColor: '#fff',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#2c5aa0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearFilterText: {
+    color: '#2c5aa0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    width: '80%',
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2c5aa0',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  typeList: {
+    maxHeight: 400,
+  },
+  typeOption: {
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  typeOptionSelected: {
+    borderColor: '#2c5aa0',
+    backgroundColor: '#e3f2fd',
+  },
+  typeOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+  },
+  typeOptionTextSelected: {
+    color: '#2c5aa0',
+  },
+  modalCloseButton: {
+    backgroundColor: '#2c5aa0',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

@@ -8,9 +8,9 @@ import {
   Alert,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState, setUser } from './store';
-import { authService } from './auth';
-import { pokeAPI } from './api';
+import { RootState, setUser } from '../store';
+import { authService } from '../services/authService';
+import { pokeAPI } from '../services/pokeAPI';
 
 interface ProfileScreenProps {
   onLogout: () => void;

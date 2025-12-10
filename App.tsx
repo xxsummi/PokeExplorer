@@ -8,17 +8,24 @@ import {
 } from 'react-native';
 import { Provider } from 'react-redux';
 
-import { store } from './store';
-import { LoginScreen } from './LoginScreen';
-import { PokedexScreen } from './PokedexScreen';
-import { PokemonDetailScreen } from './PokemonDetailScreen';
-import { HuntScreen } from './HuntScreen';
-import { CameraScreen } from './CameraScreen';
-import { AR3DScreen } from './AR3DScreen';
-import { ProfileScreen } from './ProfileScreen';
-import { VRLiteHabitatScreen } from './VRLiteHabitatScreen';
-import { Pokemon } from './types';
-import { authService } from './auth';
+/**
+ * Main App Component
+ * 
+ * Root component that manages navigation and global state
+ * Uses Redux for state management and custom navigation system
+ */
+
+import { store } from './src/store';
+import { LoginScreen } from './src/screens/LoginScreen';
+import { PokedexScreen } from './src/screens/PokedexScreen';
+import { PokemonDetailScreen } from './src/screens/PokemonDetailScreen';
+import { HuntScreen } from './src/screens/HuntScreen';
+import { CameraScreen } from './src/screens/CameraScreen';
+import { AR3DScreen } from './src/screens/AR3DScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
+import { VRLiteHabitatScreen } from './src/screens/VRLiteHabitatScreen';
+import { Pokemon } from './src/types';
+import { authService } from './src/services/authService';
 
 type Screen = 'login' | 'pokedex' | 'detail' | 'hunt' | 'ar' | 'vr' | 'profile';
 

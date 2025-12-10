@@ -1,3 +1,10 @@
+/**
+ * Type Definitions
+ * 
+ * Centralized TypeScript interfaces and types for the application
+ * All domain models and data structures are defined here
+ */
+
 export interface Pokemon {
   id: number;
   name: string;

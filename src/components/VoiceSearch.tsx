@@ -66,8 +66,8 @@ import {
   PermissionsAndroid,
   Platform,
 } from 'react-native';
-import { Pokemon } from './types';
-import { pokeAPI } from './api';
+import { Pokemon } from '../types';
+import { pokeAPI } from '../services/pokeAPI';
 
 const { VoiceRecognition } = NativeModules;
 const voiceEmitter = new NativeEventEmitter(VoiceRecognition);

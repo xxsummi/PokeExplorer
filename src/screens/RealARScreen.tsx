@@ -8,8 +8,8 @@ import {
 } from 'react-native';
 import { ArViewerView } from 'react-native-ar-viewer';
 import { useDispatch } from 'react-redux';
-import { addDiscoveredPokemon } from './store';
-import { pokeAPI } from './api';
+import { addDiscoveredPokemon } from '../store';
+import { pokeAPI } from '../services/pokeAPI';
 
 export const RealARScreen: React.FC = () => {
   const [pokemonModel, setPokemonModel] = useState<string | null>(null);

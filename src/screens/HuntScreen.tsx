@@ -13,9 +13,9 @@ import {
   InteractionManager,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState, setCurrentLocation, addEncounter, addDiscoveredPokemon } from './store';
-import { Pokemon, PokemonEncounter, Location } from './types';
-import { locationService } from './locationService';
+import { RootState, setCurrentLocation, addEncounter, addDiscoveredPokemon } from '../store';
+import { Pokemon, PokemonEncounter, Location } from '../types';
+import { locationService } from '../services/locationService';
 import PushNotification from 'react-native-push-notification';
 
 // Import MapView - will use list view if not available

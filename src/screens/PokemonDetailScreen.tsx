@@ -9,8 +9,8 @@ import {
   Share,
   ActivityIndicator,
 } from 'react-native';
-import { Pokemon } from './types';
-import { pokeAPI } from './api';
+import { Pokemon } from '../types';
+import { pokeAPI } from '../services/pokeAPI';
 
 interface PokemonDetailScreenProps {
   pokemon: Pokemon;

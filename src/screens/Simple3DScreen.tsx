@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,14 +9,11 @@ import {
   Dimensions,
   Image,
   PanResponder,
-  Platform,
-  Linking,
 } from 'react-native';
 import { Camera, useCameraDevice } from 'react-native-vision-camera';
-
 import { useDispatch } from 'react-redux';
-import { addDiscoveredPokemon } from './store';
-import { pokeAPI } from './api';
+import { addDiscoveredPokemon } from '../store';
+import { pokeAPI } from '../services/pokeAPI';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
 const { width, height } = Dimensions.get('window');
@@ -46,8 +43,8 @@ const getTypeColor = (type: string): string => {
 };
 
 const Pokemon3DComponent: React.FC<{ pokemon: Pokemon3D; onCatch: () => void }> = ({ pokemon, onCatch }) => {
-  React.useEffect(() => {
-    const scaleAnimation = Animated.loop(
+  useEffect(() => {
+    Animated.loop(
       Animated.sequence([
         Animated.timing(pokemon.scale, {
           toValue: 1.2,
@@ -60,24 +57,16 @@ const Pokemon3DComponent: React.FC<{ pokemon: Pokemon3D; onCatch: () => void }> 
           useNativeDriver: true,
         }),
       ])
-    );
-    
-    const rotationAnimation = Animated.loop(
+    ).start();
+
+    Animated.loop(
       Animated.timing(pokemon.rotation, {
         toValue: 1,
         duration: 3000,
         useNativeDriver: true,
       })
-    );
-    
-    scaleAnimation.start();
-    rotationAnimation.start();
-    
-    return () => {
-      scaleAnimation.stop();
-      rotationAnimation.stop();
-    };
-  }, [pokemon.id]);
+    ).start();
+  }, []);
 
   const spin = pokemon.rotation.interpolate({
     inputRange: [0, 1],
@@ -110,32 +99,16 @@ const Pokemon3DComponent: React.FC<{ pokemon: Pokemon3D; onCatch: () => void }> 
   );
 };
 
-export const AR3DScreen: React.FC = () => {
+export const Simple3DScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState(false);
-  const [isRequesting, setIsRequesting] = useState(false);
   const [pokemon, setPokemon] = useState<Pokemon3D[]>([]);
   const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
-  const [isActive, setIsActive] = useState(true);
   const device = useCameraDevice('back');
-  const camera = useRef<Camera>(null);
-
   const dispatch = useDispatch();
 
   useEffect(() => {
-    // Delay permission request to ensure Activity is ready
-    const timer = setTimeout(() => {
-      requestCameraPermission();
-    }, 200);
-    return () => clearTimeout(timer);
+    requestCameraPermission();
   }, []);
-
-  useEffect(() => {
-    if (hasPermission) {
-      setIsActive(true);
-      console.log('Camera permission granted, activating camera');
-      console.log('Camera device:', device ? 'Found' : 'Not found');
-    }
-  }, [hasPermission, device]);
 
   const panResponder = PanResponder.create({
     onMoveShouldSetPanResponder: () => true,
@@ -181,62 +154,13 @@ export const AR3DScreen: React.FC = () => {
   });
 
   const requestCameraPermission = async () => {
-    if (isRequesting) return; // Prevent multiple simultaneous requests
-    
-    setIsRequesting(true);
-    try {
-      // Wait for Activity to be ready on Android
-      if (Platform.OS === 'android') {
-        // Use setTimeout instead of deprecated InteractionManager
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-      
-      const permission = Platform.OS === 'ios' 
-        ? PERMISSIONS.IOS.CAMERA
-        : PERMISSIONS.ANDROID.CAMERA;
-      
-      console.log('Requesting camera permission...');
-      const result = await request(permission);
-      console.log('Permission result:', result);
-      
-      setHasPermission(result === RESULTS.GRANTED);
-      
-      if (result === RESULTS.DENIED) {
-        Alert.alert(
-          'Permission Denied',
-          'Camera permission was denied. Please grant permission to use AR features.',
-          [{ text: 'OK' }]
-        );
-      } else if (result === RESULTS.BLOCKED) {
-        Alert.alert(
-          'Permission Blocked',
-          'Camera permission is blocked. Please enable it in Settings.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => {
-              Linking.openSettings();
-            }},
-          ]
-        );
-      }
-    } catch (error) {
-      console.error('Camera permission error:', error);
-      Alert.alert('Error', `Failed to request camera permission: ${error}`);
-    } finally {
-      setIsRequesting(false);
-    }
+    const result = await request(PERMISSIONS.ANDROID.CAMERA);
+    setHasPermission(result === RESULTS.GRANTED);
   };
 
   const spawnPokemon = async () => {
     try {
-      console.log('Spawning Pokemon...');
       const pokemonData = await pokeAPI.getRandomPokemon();
-      console.log('Pokemon data received:', pokemonData.name, pokemonData.sprites?.front_default);
-      
-      if (!pokemonData || !pokemonData.sprites?.front_default) {
-        Alert.alert('Error', 'Failed to load Pokemon data. Please try again.');
-        return;
-      }
       
       const baseX = Math.random() * (width - 100);
       const baseY = Math.random() * (height - 200) + 100;
@@ -254,18 +178,14 @@ export const AR3DScreen: React.FC = () => {
       };
       
       setPokemon(prev => [...prev, newPokemon]);
-      console.log('Spawned AR Pokemon:', newPokemon.name, 'at position', baseX, baseY);
+      console.log('Spawned 3D Pokemon:', newPokemon.name);
       
       setTimeout(() => {
         setPokemon(prev => prev.filter(p => p.id !== newPokemon.id));
       }, 10000);
       
-    } catch (error: any) {
-      console.error('Failed to spawn Pokemon:', error);
-      Alert.alert(
-        'Error', 
-        `Failed to spawn Pokemon: ${error.message || 'Network error'}. Please check your connection and try again.`
-      );
+    } catch (error) {
+      console.log('Failed to spawn Pokemon:', error);
     }
   };
 
@@ -285,43 +205,21 @@ export const AR3DScreen: React.FC = () => {
     }
   };
 
-  if (!hasPermission) {
+  if (!hasPermission || !device) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>AR Pokemon</Text>
-        <Text style={styles.description}>Camera permission required for AR Pokemon experience</Text>
-        <TouchableOpacity 
-          style={[styles.startButton, isRequesting && styles.buttonDisabled]} 
-          onPress={requestCameraPermission}
-          disabled={isRequesting}
-        >
-          <Text style={styles.buttonText}>
-            {isRequesting ? 'Requesting...' : 'Grant Permission'}
-          </Text>
+        <Text style={styles.title}>3D Pokemon Camera</Text>
+        <Text style={styles.description}>Camera permission required for 3D Pokemon experience</Text>
+        <TouchableOpacity style={styles.startButton} onPress={requestCameraPermission}>
+          <Text style={styles.buttonText}>Grant Permission</Text>
         </TouchableOpacity>
-      </View>
-    );
-  }
-
-  if (!device) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>AR Pokemon</Text>
-        <Text style={styles.description}>No camera device found. Please check your device has a camera.</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.arContainer} {...panResponder.panHandlers}>
-      <Camera
-        ref={camera}
-        style={styles.camera}
-        device={device}
-        isActive={isActive}
-        photo={true}
-        enableZoomGesture={true}
-      />
+      <Camera style={styles.camera} device={device} isActive={true} />
       
       {pokemon.map((poke) => (
         <Pokemon3DComponent
@@ -333,7 +231,7 @@ export const AR3DScreen: React.FC = () => {
       
       <View style={styles.controls}>
         <TouchableOpacity style={styles.spawnButton} onPress={spawnPokemon}>
-          <Text style={styles.buttonText}>Spawn Pokemon</Text>
+          <Text style={styles.buttonText}>Spawn 3D Pokemon</Text>
         </TouchableOpacity>
         <Text style={styles.instructionText}>Drag to look around</Text>
       </View>
@@ -367,16 +265,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 25,
   },
-  buttonDisabled: {
-    backgroundColor: '#999',
-    opacity: 0.6,
-  },
   arContainer: {
     flex: 1,
   },
   camera: {
     flex: 1,
-    backgroundColor: '#000',
   },
   pokemon3D: {
     position: 'absolute',

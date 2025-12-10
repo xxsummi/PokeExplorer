@@ -10,9 +10,9 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
-import { RootState, setCurrentLocation } from './store';
-import { PokemonEncounter, Location } from './types';
-import { locationService } from './locationService';
+import { RootState, setCurrentLocation } from '../store';
+import { PokemonEncounter, Location } from '../types';
+import { locationService } from '../services/locationService';
 import { GOOGLE_MAPS_API_KEY } from '@env';
 
 interface MapScreenProps {

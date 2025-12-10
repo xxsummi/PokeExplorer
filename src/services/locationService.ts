@@ -1,8 +1,8 @@
 import Geolocation from 'react-native-geolocation-service';
 import { request, PERMISSIONS, RESULTS, Permission } from 'react-native-permissions';
 import { Platform, Alert } from 'react-native';
-import { Location, PokemonEncounter, Pokemon } from './types';
-import { pokeAPI } from './api';
+import { Location, PokemonEncounter, Pokemon } from '../types';
+import { pokeAPI } from './pokeAPI';
 
 export class LocationService {
   private watchId: number | null = null;

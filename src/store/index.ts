@@ -1,5 +1,17 @@
+/**
+ * Redux Store Configuration
+ * 
+ * Centralized state management using Redux Toolkit
+ * Manages:
+ * - User authentication state
+ * - Pokemon data and cache
+ * - Location tracking
+ * - Discovered Pokemon
+ * - Encounter history
+ */
+
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Pokemon, User, PokemonEncounter } from './types';
+import { Pokemon, User, PokemonEncounter } from '../types';
 
 interface AppState {
   user: User | null;
@@ -54,7 +66,15 @@ const appSlice = createSlice({
   },
 });
 
-export const { setUser, setPokemon, addPokemon, addDiscoveredPokemon, setCurrentLocation, addEncounter, setLoading } = appSlice.actions;
+export const { 
+  setUser, 
+  setPokemon, 
+  addPokemon, 
+  addDiscoveredPokemon, 
+  setCurrentLocation, 
+  addEncounter, 
+  setLoading 
+} = appSlice.actions;
 
 export const store = configureStore({
   reducer: {
@@ -62,8 +82,8 @@ export const store = configureStore({
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
-      serializableCheck: false,
-      immutableCheck: false,
+      serializableCheck: false, // Allow non-serializable values (Pokemon objects)
+      immutableCheck: false, // Disable for performance
     }),
 });
 

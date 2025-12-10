@@ -9,8 +9,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useDispatch } from 'react-redux';
-import { setUser } from './store';
-import { authService } from './auth';
+import { setUser } from '../store';
+import { authService } from '../services/authService';
 
 interface LoginScreenProps {
   onLogin: () => void;

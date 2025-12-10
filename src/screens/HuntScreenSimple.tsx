@@ -11,9 +11,9 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
-import { RootState, setCurrentLocation, addEncounter, addDiscoveredPokemon } from './store';
-import { Pokemon, PokemonEncounter, Location } from './types';
-import { pokeAPI } from './api';
+import { RootState, setCurrentLocation, addEncounter, addDiscoveredPokemon } from '../store';
+import { Pokemon, PokemonEncounter, Location } from '../types';
+import { pokeAPI } from '../services/pokeAPI';
 
 export const HuntScreen: React.FC = () => {
   const [hunting, setHunting] = useState(false);

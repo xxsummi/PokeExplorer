@@ -12,8 +12,8 @@ import {
 import { Camera, useCameraDevice } from 'react-native-vision-camera';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState, addDiscoveredPokemon } from './store';
-import { pokeAPI } from './api';
+import { RootState, addDiscoveredPokemon } from '../store';
+import { pokeAPI } from '../services/pokeAPI';
 
 export const CameraScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState(false);

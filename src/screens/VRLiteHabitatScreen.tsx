@@ -20,7 +20,7 @@ try {
 } catch (e) {
   console.log('Sensors module not available');
 }
-import { pokeAPI } from './api';
+import { pokeAPI } from '../services/pokeAPI';
 
 const { width, height } = Dimensions.get('window');
 
