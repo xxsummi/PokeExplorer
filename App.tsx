@@ -16,21 +16,31 @@ import { HuntScreen } from './HuntScreen';
 import { CameraScreen } from './CameraScreen';
 import { AR3DScreen } from './AR3DScreen';
 import { ProfileScreen } from './ProfileScreen';
+import { FeedScreen } from './FeedScreen';
 
 import { Pokemon } from './types';
 import { authService } from './auth';
+import { spawnService } from './spawnService';
 
-type Screen = 'login' | 'pokedex' | 'detail' | 'hunt' | 'ar' | 'profile';
+type Screen = 'login' | 'pokedex' | 'detail' | 'hunt' | 'ar' | 'feed' | 'profile' | 'ar-catch';
 
 function AppContent() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('login');
   const [selectedPokemon, setSelectedPokemon] = useState<Pokemon | null>(null);
+  const [catchingSpawn, setCatchingSpawn] = useState<any>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     // Skip Firebase auth for now
     setIsAuthenticated(true);
     setCurrentScreen('pokedex');
+    
+    // Start spawn service
+    spawnService.startSpawning();
+    
+    return () => {
+      spawnService.stopSpawning();
+    };
   }, []);
 
   const handleLogin = () => {
@@ -48,6 +58,16 @@ function AppContent() {
     setCurrentScreen('detail');
   };
 
+  const handleCatchMode = (spawn: any) => {
+    setCatchingSpawn(spawn);
+    setCurrentScreen('ar-catch');
+  };
+
+  const exitCatchMode = () => {
+    setCatchingSpawn(null);
+    setCurrentScreen('feed');
+  };
+
   const renderScreen = () => {
     switch (currentScreen) {
       case 'login':
@@ -63,10 +83,19 @@ function AppContent() {
           />
         ) : null;
       case 'hunt':
-        return <HuntScreen />;
+        return <HuntScreen onCatchMode={handleCatchMode} />;
       case 'ar':
         return <AR3DScreen />;
-
+      case 'ar-catch':
+        return catchingSpawn ? (
+          <AR3DScreen 
+            catchMode={true}
+            targetSpawn={catchingSpawn}
+            onExitCatch={exitCatchMode}
+          />
+        ) : null;
+      case 'feed':
+        return <FeedScreen onPokemonSelect={handlePokemonSelect} onCatchMode={handleCatchMode} />;
       case 'profile':
         return <ProfileScreen onLogout={handleLogout} />;
       default:
@@ -75,7 +104,7 @@ function AppContent() {
   };
 
   const renderBottomNav = () => {
-    if (!isAuthenticated || currentScreen === 'login' || currentScreen === 'detail') {
+    if (!isAuthenticated || currentScreen === 'login' || currentScreen === 'detail' || currentScreen === 'ar-catch') {
       return null;
     }
 
@@ -99,7 +128,14 @@ function AppContent() {
           style={[styles.navButton, currentScreen === 'ar' && styles.activeNavButton]}
           onPress={() => setCurrentScreen('ar')}
         >
-          <Text style={[styles.navText, currentScreen === 'ar' && styles.activeNavText]}>📷 AR/VR</Text>
+          <Text style={[styles.navText, currentScreen === 'ar' && styles.activeNavText]}>📷 AR</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.navButton, currentScreen === 'feed' && styles.activeNavButton]}
+          onPress={() => setCurrentScreen('feed')}
+        >
+          <Text style={[styles.navText, currentScreen === 'feed' && styles.activeNavText]}>📡 Feed</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 

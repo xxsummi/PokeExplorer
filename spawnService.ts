@@ -1,0 +1,121 @@
+import { store } from './store';
+import { addSpawn, cleanupExpiredSpawns, removeExpiredSpawns } from './store';
+import { pokeAPI } from './api';
+import { PokemonSpawn } from './types';
+import { notificationService } from './notifications';
+
+class SpawnService {
+  private static instance: SpawnService;
+  private spawnInterval: NodeJS.Timeout | null = null;
+  private isRunning = false;
+
+  static getInstance(): SpawnService {
+    if (!SpawnService.instance) {
+      SpawnService.instance = new SpawnService();
+    }
+    return SpawnService.instance;
+  }
+
+  startSpawning() {
+    if (this.isRunning) return;
+    this.isRunning = true;
+
+    const spawnWithLogarithmicRate = () => {
+      if (!this.isRunning) return;
+      
+      this.generateSpawn();
+      this.cleanupExpiredSpawns();
+      
+      // Calculate next spawn delay based on current spawn count
+      const state = store.getState();
+      const activeSpawns = state.app.spawns.filter(spawn => 
+        !spawn.caught && spawn.expiresAt > Date.now()
+      ).length;
+      
+      // Harsh logarithmic delay: extremely slow at 8+ spawns
+      const baseDelay = 5000; // 5 seconds minimum
+      let delay;
+      if (activeSpawns >= 8) {
+        delay = 115000 + (activeSpawns - 8) * 55000; // 1:55+ minutes at 8+
+      } else {
+        const logFactor = Math.pow(activeSpawns, 2) * 5000; // Exponential scaling
+        delay = baseDelay + logFactor;
+      }
+      
+      this.spawnInterval = setTimeout(spawnWithLogarithmicRate, delay);
+    };
+    
+    spawnWithLogarithmicRate();
+  }
+
+  stopSpawning() {
+    this.isRunning = false;
+    if (this.spawnInterval) {
+      clearTimeout(this.spawnInterval);
+      this.spawnInterval = null;
+    }
+  }
+
+  private async generateSpawn() {
+    const state = store.getState();
+    const { currentLocation, spawns } = state.app;
+
+    if (!currentLocation) return;
+
+    // Cap active spawns at 15
+    const activeSpawns = spawns.filter(spawn => 
+      !spawn.caught && spawn.expiresAt > Date.now()
+    );
+    if (activeSpawns.length >= 15) return;
+
+    try {
+      // Generate random Pokémon (Gen 1-3 for variety)
+      const randomId = Math.floor(Math.random() * 386) + 1;
+      const pokemon = await pokeAPI.getPokemon(randomId);
+
+      // Weighted location variance - 70% within 100m, 30% farther
+      const distance = Math.random() < 0.7 ? Math.random() * 0.001 : Math.random() * 0.01; // 70% within 100m, 30% far
+      const angle = Math.random() * 2 * Math.PI;
+      const latVariance = distance * Math.cos(angle);
+      const lngVariance = distance * Math.sin(angle);
+
+      // Distance-based expiration: close = 60s, far = 30s
+      const isClose = distance <= 0.001;
+      const expireTime = isClose ? 60000 : 30000; // 60s close, 30s far
+
+      const spawn: PokemonSpawn = {
+        id: `spawn-${Date.now()}-${Math.random()}`,
+        pokemon,
+        location: {
+          latitude: currentLocation.latitude + latVariance,
+          longitude: currentLocation.longitude + lngVariance,
+        },
+        timestamp: Date.now(),
+        expiresAt: Date.now() + expireTime,
+        caught: false,
+      };
+
+      store.dispatch(addSpawn(spawn));
+
+      // Send notification
+      notificationService.showPokemonNearbyNotification(
+        pokemon.name.charAt(0).toUpperCase() + pokemon.name.slice(1)
+      );
+
+    } catch (error) {
+      console.log('Spawn generation error:', error);
+    }
+  }
+
+  // Clean up expired spawns
+  private cleanupExpiredSpawns() {
+    store.dispatch(removeExpiredSpawns());
+  }
+
+  // Force cleanup all expired spawns
+  forceCleanup() {
+    store.dispatch(removeExpiredSpawns());
+  }
+}
+
+export const spawnService = SpawnService.getInstance();

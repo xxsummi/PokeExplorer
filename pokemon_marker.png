@@ -1,0 +1,11 @@
+# Pokemon Marker Instructions
+# 
+# This file should be replaced with an actual PNG image for AR tracking.
+# 
+# Requirements:
+# - High contrast geometric patterns
+# - 512x512+ pixels minimum
+# - Print at 15cm width for accurate tracking
+# - Asymmetric design for orientation detection
+# 
+# The AR system uses this marker to anchor Pokemon in world space.

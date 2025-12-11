@@ -53,3 +53,21 @@ export interface PokemonEncounter {
   timestamp: number;
   biome?: string;
 }
+
+export interface PokemonSpawn {
+  id: string;
+  pokemon: Pokemon;
+  location: Location;
+  timestamp: number;
+  expiresAt: number;
+  caught: boolean;
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  unlockedAt: number;
+  type: string;
+  tier: number;
+}

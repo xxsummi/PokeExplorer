@@ -13,15 +13,19 @@ import {
 } from 'react-native';
 
 import { Camera, useCameraDevice } from 'react-native-vision-camera';
-import { useDispatch } from 'react-redux';
-import { addDiscoveredPokemon } from './store';
+import { useDispatch, useSelector } from 'react-redux';
+import { addDiscoveredPokemon, catchPokemon, addSpawn, clearAllSpawns, addAchievement } from './store';
+import { RootState } from './store';
+import { locationService } from './locationService';
+import { PokemonSpawn, Achievement } from './types';
 import { pokeAPI } from './api';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
 const { width, height } = Dimensions.get('window');
 
 interface Pokemon3D {
-  id: number;
+  id: string;
+  spawnId: string;
   name: string;
   sprite: string;
   baseX: number;
@@ -108,12 +112,23 @@ const Pokemon3DComponent: React.FC<{ pokemon: Pokemon3D; onCatch: () => void }> 
   );
 };
 
-export const AR3DScreen: React.FC = () => {
+interface AR3DScreenProps {
+  catchMode?: boolean;
+  targetSpawn?: any;
+  onExitCatch?: () => void;
+}
+
+export const AR3DScreen: React.FC<AR3DScreenProps> = ({ 
+  catchMode = false, 
+  targetSpawn = null, 
+  onExitCatch 
+}) => {
   const [hasPermission, setHasPermission] = useState(false);
-  const [pokemon, setPokemon] = useState<Pokemon3D[]>([]);
+  const [arPokemon, setArPokemon] = useState<Pokemon3D[]>([]);
+  const { spawns, currentLocation, caughtPokemon } = useSelector((state: RootState) => state.app);
   const [pokeballs, setPokeballs] = useState<Pokeball[]>([]);
   const [isActive, setIsActive] = useState(true);
-  const [catchingMode, setCatchingMode] = useState(false);
+  const [catchingMode, setCatchingMode] = useState(catchMode);
   const [targetPokemon, setTargetPokemon] = useState<Pokemon3D | null>(null);
   const [pokeballPosition] = useState(new Animated.ValueXY({ x: width / 2 - 25, y: height - 150 }));
   const isMoving = useRef(false);
@@ -175,36 +190,64 @@ export const AR3DScreen: React.FC = () => {
     }
   };
 
-  const spawnPokemon = async () => {
-    try {
-      const pokemonData = await pokeAPI.getRandomPokemon();
-      
-      const baseX = Math.random() * (width - 100);
-      const baseY = Math.random() * (height - 200) + 100;
-      
-      const newPokemon: Pokemon3D = {
-        id: Date.now(),
-        name: pokemonData.name,
-        sprite: pokemonData.sprites.front_default,
-        baseX,
-        baseY,
-        translateX: new Animated.Value(baseX),
-        translateY: new Animated.Value(baseY),
+  // Convert spawns to AR Pokemon - either target spawn or nearby spawns
+  React.useEffect(() => {
+    if (catchMode && targetSpawn) {
+      // Catch mode: show only target spawn
+      const targetAR: Pokemon3D = {
+        id: targetSpawn.id,
+        spawnId: targetSpawn.id,
+        name: targetSpawn.pokemon.name,
+        sprite: targetSpawn.pokemon.sprites.front_default,
+        baseX: width / 2 - 75,
+        baseY: height / 3,
+        translateX: new Animated.Value(width / 2 - 75),
+        translateY: new Animated.Value(height / 3),
         scale: new Animated.Value(1),
         rotation: new Animated.Value(0),
       };
+      setArPokemon([targetAR]);
+      setTargetPokemon(targetAR);
+      setCatchingMode(true);
+      startPokemonMovement(targetAR);
+    } else {
+      // Normal AR mode: show nearby spawns
+      const activeSpawns = spawns.filter(spawn => 
+        !spawn.caught && spawn.expiresAt > Date.now()
+      );
       
-      setPokemon(prev => [...prev, newPokemon]);
-      console.log('Spawned AR Pokemon:', newPokemon.name);
+      const nearbySpawns = activeSpawns.filter(spawn => {
+        if (!currentLocation) return false;
+        const distance = locationService.calculateDistance(
+          currentLocation.latitude,
+          currentLocation.longitude,
+          spawn.location.latitude,
+          spawn.location.longitude
+        );
+        return distance <= 100;
+      });
       
-      setTimeout(() => {
-        setPokemon(prev => prev.filter(p => p.id !== newPokemon.id));
-      }, 10000);
+      const newArPokemon = nearbySpawns.slice(0, 5).map(spawn => {
+        const baseX = Math.random() * (width - 100);
+        const baseY = Math.random() * (height - 200) + 100;
+        
+        return {
+          id: spawn.id,
+          spawnId: spawn.id,
+          name: spawn.pokemon.name,
+          sprite: spawn.pokemon.sprites.front_default,
+          baseX,
+          baseY,
+          translateX: new Animated.Value(baseX),
+          translateY: new Animated.Value(baseY),
+          scale: new Animated.Value(1),
+          rotation: new Animated.Value(0),
+        };
+      });
       
-    } catch (error) {
-      console.log('Failed to spawn Pokemon:', error);
+      setArPokemon(newArPokemon);
     }
-  };
+  }, [spawns, currentLocation, catchMode, targetSpawn]);
 
   const throwPokeballToPosition = (startX: number, startY: number, targetX: number, targetY: number) => {
     const newPokeball: Pokeball = {
@@ -270,19 +313,19 @@ export const AR3DScreen: React.FC = () => {
       Animated.parallel([
         Animated.timing(pokemon.translateX, {
           toValue: newX,
-          duration: 1500 + Math.random() * 1000,
+          duration: 3000 + Math.random() * 2000,
           useNativeDriver: true,
         }),
         Animated.timing(pokemon.translateY, {
           toValue: newY,
-          duration: 1500 + Math.random() * 1000,
+          duration: 3000 + Math.random() * 2000,
           useNativeDriver: true,
         }),
       ]).start(() => {
         if (isMoving.current) {
           pokemon.baseX = newX;
           pokemon.baseY = newY;
-          setTimeout(moveRandomly, 200 + Math.random() * 800);
+          setTimeout(moveRandomly, 2000 + Math.random() * 3000);
         }
       });
     };
@@ -294,6 +337,9 @@ export const AR3DScreen: React.FC = () => {
     setCatchingMode(false);
     setTargetPokemon(null);
     isMoving.current = false;
+    if (onExitCatch) {
+      onExitCatch();
+    }
   };
   
   const checkPokemonHit = (ballX: number, ballY: number) => {
@@ -311,23 +357,58 @@ export const AR3DScreen: React.FC = () => {
     }
   };
   
+  const spawnPokemon = async () => {
+    if (!currentLocation) return;
+    
+    // Check spawn limit
+    const activeSpawns = spawns.filter(spawn => 
+      !spawn.caught && spawn.expiresAt > Date.now()
+    );
+    if (activeSpawns.length >= 15) {
+      Alert.alert('Spawn Limit', 'Maximum 15 Pokemon can be active at once!');
+      return;
+    }
+    
+    try {
+      const randomId = Math.floor(Math.random() * 386) + 1;
+      const pokemon = await pokeAPI.getPokemon(randomId);
+      
+      const distance = Math.random() * 0.001; // Close spawn
+      const angle = Math.random() * 2 * Math.PI;
+      const latVariance = distance * Math.cos(angle);
+      const lngVariance = distance * Math.sin(angle);
+      
+      const spawn: PokemonSpawn = {
+        id: `ar-spawn-${Date.now()}-${Math.random()}`,
+        pokemon,
+        location: {
+          latitude: currentLocation.latitude + latVariance,
+          longitude: currentLocation.longitude + lngVariance,
+        },
+        timestamp: Date.now(),
+        expiresAt: Date.now() + 180000, // 3 minutes
+        caught: false,
+      };
+      
+      dispatch(addSpawn(spawn));
+    } catch (error) {
+      console.log('Failed to spawn Pokemon:', error);
+    }
+  };
+
   const attemptCatch = async (pokemonToCatch: Pokemon3D) => {
     const catchRate = Math.random();
     
     if (catchRate > 0.5) {
-      try {
-        const pokemonData = await pokeAPI.getRandomPokemon();
-        dispatch(addDiscoveredPokemon(pokemonData));
-        
-        setPokemon(prev => prev.filter(p => p.id !== pokemonToCatch.id));
-        
+      const spawn = spawns.find(s => s.id === pokemonToCatch.spawnId);
+      if (spawn) {
+        dispatch(catchPokemon(pokemonToCatch.spawnId));
+        checkForAchievements(spawn.pokemon);
         Alert.alert(
           'Pokemon Caught!',
-          `You caught ${pokemonToCatch.name}! Added to your Pokedex.`
+          `You caught ${pokemonToCatch.name}! Added to your Pokedex.`,
+          [{ text: 'Great!', onPress: exitCatchingMode }]
         );
-        exitCatchingMode();
-      } catch (error) {
-        console.log('Failed to catch Pokemon:', error);
       }
     } else {
       Alert.alert(
@@ -335,6 +416,61 @@ export const AR3DScreen: React.FC = () => {
         `${pokemonToCatch.name} broke free! Try again.`
       );
     }
+  };
+
+  const checkForAchievements = (pokemon: any) => {
+    const pokemonType = pokemon.types[0].type.name;
+    const typeCount = caughtPokemon.filter(p => 
+      p.types.some(t => t.type.name === pokemonType)
+    ).length + 1;
+
+    const tierThresholds = [5, 15, 30];
+    const tierNames = ['I', 'II', 'III'];
+    
+    tierThresholds.forEach((threshold, index) => {
+      if (typeCount === threshold) {
+        const achievement = {
+          id: `${pokemonType}-${tierNames[index]}`,
+          title: `${pokemonType.charAt(0).toUpperCase() + pokemonType.slice(1)} ${getTierTitle(pokemonType)} ${tierNames[index]}`,
+          description: `Caught ${threshold} ${pokemonType}-type Pokémon`,
+          unlockedAt: Date.now(),
+          type: pokemonType,
+          tier: index + 1,
+        };
+        
+        dispatch(addAchievement(achievement));
+        
+        Alert.alert(
+          'Achievement Unlocked! 🏆',
+          `${achievement.title}\n${achievement.description}`,
+          [{ text: 'Awesome!', style: 'default' }]
+        );
+      }
+    });
+  };
+
+  const getTierTitle = (type: string): string => {
+    const titles: { [key: string]: string } = {
+      bug: 'Bug Catcher',
+      dragon: 'Dragon Tamer',
+      fire: 'Fire Master',
+      water: 'Water Expert',
+      grass: 'Nature Lover',
+      electric: 'Thunder Trainer',
+      psychic: 'Mind Reader',
+      ghost: 'Spirit Walker',
+      dark: 'Shadow Master',
+      steel: 'Metal Collector',
+      fairy: 'Fairy Friend',
+      fighting: 'Martial Artist',
+      poison: 'Toxin Handler',
+      ground: 'Earth Shaker',
+      flying: 'Sky Rider',
+      rock: 'Rock Crusher',
+      ice: 'Frost Guardian',
+      normal: 'Generalist',
+    };
+    return titles[type] || 'Type Specialist';
   };
 
   if (!hasPermission) {
@@ -361,6 +497,8 @@ export const AR3DScreen: React.FC = () => {
     );
   }
 
+
+  
   if (catchingMode && targetPokemon) {
     return (
       <View style={styles.arContainer}>
@@ -439,7 +577,7 @@ export const AR3DScreen: React.FC = () => {
       </View>
     );
   }
-  
+
   return (
     <View style={styles.arContainer}>
       <Camera
@@ -450,7 +588,7 @@ export const AR3DScreen: React.FC = () => {
         photo={true}
       />
       
-      {pokemon.map((poke) => (
+      {arPokemon.map((poke) => (
         <Pokemon3DComponent
           key={poke.id}
           pokemon={poke}
@@ -458,14 +596,22 @@ export const AR3DScreen: React.FC = () => {
         />
       ))}
       
-      <View style={styles.controls}>
-        <TouchableOpacity style={styles.spawnButton} onPress={spawnPokemon}>
-          <Text style={styles.buttonText}>Spawn Pokemon</Text>
-        </TouchableOpacity>
-        <Text style={styles.instructionText}>
-          Tap Pokemon to enter catching mode
-        </Text>
-      </View>
+      {!catchMode && (
+        <View style={styles.controls}>
+          <TouchableOpacity style={styles.spawnButton} onPress={spawnPokemon}>
+            <Text style={styles.buttonText}>Spawn Pokemon</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.clearButton} onPress={() => dispatch(clearAllSpawns())}>
+            <Text style={styles.buttonText}>Clear Area</Text>
+          </TouchableOpacity>
+          <Text style={styles.instructionText}>
+            {arPokemon.length}/5 Pokemon in AR (nearby only)
+          </Text>
+          <Text style={styles.instructionText}>
+            Tap Pokemon to enter catching mode
+          </Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -538,6 +684,13 @@ const styles = StyleSheet.create({
   },
   spawnButton: {
     backgroundColor: '#2c5aa0',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginBottom: 10,
+  },
+  clearButton: {
+    backgroundColor: '#e74c3c',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 25,

@@ -1,5 +1,5 @@
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Pokemon, User, PokemonEncounter } from './types';
+import { Pokemon, User, PokemonEncounter, PokemonSpawn, Achievement } from './types';
 
 interface AppState {
   user: User | null;
@@ -7,6 +7,9 @@ interface AppState {
   discoveredPokemon: Pokemon[];
   currentLocation: { latitude: number; longitude: number } | null;
   encounters: PokemonEncounter[];
+  spawns: PokemonSpawn[];
+  caughtPokemon: Pokemon[];
+  achievements: Achievement[];
   loading: boolean;
 }
 
@@ -16,6 +19,9 @@ const initialState: AppState = {
   discoveredPokemon: [],
   currentLocation: null,
   encounters: [],
+  spawns: [],
+  caughtPokemon: [],
+  achievements: [],
   loading: false,
 };
 
@@ -51,10 +57,47 @@ const appSlice = createSlice({
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.loading = action.payload;
     },
+    addSpawn: (state, action: PayloadAction<PokemonSpawn>) => {
+      // Enforce 15 spawn limit
+      const activeSpawns = state.spawns.filter(spawn => 
+        !spawn.caught && spawn.expiresAt > Date.now()
+      );
+      if (activeSpawns.length < 15) {
+        state.spawns.push(action.payload);
+      }
+    },
+    catchPokemon: (state, action: PayloadAction<string>) => {
+      const spawn = state.spawns.find(s => s.id === action.payload);
+      if (spawn) {
+        spawn.caught = true;
+        state.caughtPokemon.push(spawn.pokemon);
+        if (!state.discoveredPokemon.find(p => p.id === spawn.pokemon.id)) {
+          state.discoveredPokemon.push(spawn.pokemon);
+        }
+      }
+    },
+    addAchievement: (state, action: PayloadAction<Achievement>) => {
+      if (!state.achievements.find(a => a.id === action.payload.id)) {
+        state.achievements.push(action.payload);
+      }
+    },
+    cleanupExpiredSpawns: (state) => {
+      const now = Date.now();
+      state.spawns = state.spawns.filter(spawn => 
+        !spawn.caught && spawn.expiresAt > now
+      );
+    },
+    removeExpiredSpawns: (state) => {
+      const now = Date.now();
+      state.spawns = state.spawns.filter(spawn => spawn.expiresAt > now);
+    },
+    clearAllSpawns: (state) => {
+      state.spawns = [];
+    },
   },
 });
 
-export const { setUser, setPokemon, addPokemon, addDiscoveredPokemon, setCurrentLocation, addEncounter, setLoading } = appSlice.actions;
+export const { setUser, setPokemon, addPokemon, addDiscoveredPokemon, setCurrentLocation, addEncounter, setLoading, addSpawn, catchPokemon, addAchievement, cleanupExpiredSpawns, removeExpiredSpawns, clearAllSpawns } = appSlice.actions;
 
 export const store = configureStore({
   reducer: {
