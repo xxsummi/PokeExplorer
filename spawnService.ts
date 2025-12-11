@@ -3,6 +3,7 @@ import { addSpawn, cleanupExpiredSpawns, removeExpiredSpawns } from './store';
 import { pokeAPI } from './api';
 import { PokemonSpawn } from './types';
 import { notificationService } from './notifications';
+import { locationService } from './locationService';
 
 class SpawnService {
   private static instance: SpawnService;
@@ -97,10 +98,26 @@ class SpawnService {
 
       store.dispatch(addSpawn(spawn));
 
-      // Send notification
-      notificationService.showPokemonNearbyNotification(
-        pokemon.name.charAt(0).toUpperCase() + pokemon.name.slice(1)
+      // Calculate distance and send notification for nearby Pokemon
+      const distanceInMeters = locationService.calculateDistance(
+        currentLocation.latitude,
+        currentLocation.longitude,
+        spawn.location.latitude,
+        spawn.location.longitude
       );
+      
+      console.log(`Pokemon ${pokemon.name} spawned at ${Math.round(distanceInMeters)}m away`);
+      
+      // Only notify for Pokemon within 200m
+      if (distanceInMeters <= 200) {
+        console.log(`Sending notification for nearby ${pokemon.name}`);
+        notificationService.showPokemonNearbyNotification(
+          pokemon.name.charAt(0).toUpperCase() + pokemon.name.slice(1),
+          Math.round(distanceInMeters)
+        );
+      } else {
+        console.log(`Pokemon ${pokemon.name} too far (${Math.round(distanceInMeters)}m) - no notification`);
+      }
 
     } catch (error) {
       console.log('Spawn generation error:', error);

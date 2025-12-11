@@ -21,6 +21,7 @@ import { FeedScreen } from './FeedScreen';
 import { Pokemon } from './types';
 import { authService } from './auth';
 import { spawnService } from './spawnService';
+import { notificationService } from './notifications';
 
 type Screen = 'login' | 'pokedex' | 'detail' | 'hunt' | 'ar' | 'feed' | 'profile' | 'ar-catch';
 
@@ -35,8 +36,12 @@ function AppContent() {
     setIsAuthenticated(true);
     setCurrentScreen('pokedex');
     
-    // Start spawn service
-    spawnService.startSpawning();
+    // Request notification permissions and start spawn service
+    const initServices = async () => {
+      await notificationService.requestPermissions();
+      spawnService.startSpawning();
+    };
+    initServices();
     
     return () => {
       spawnService.stopSpawning();

@@ -1,4 +1,4 @@
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, PermissionsAndroid } from 'react-native';
 
 let PushNotification: any = null;
 try {
@@ -17,7 +17,7 @@ class NotificationService {
     
     PushNotification.configure({
       onNotification: function (notification) {
-        console.log('Notification:', notification);
+        console.log('Notification received:', notification);
       },
       permissions: {
         alert: true,
@@ -25,34 +25,63 @@ class NotificationService {
         sound: true,
       },
       popInitialNotification: true,
-      requestPermissions: Platform.OS === 'ios',
+      requestPermissions: true,
     });
 
-    PushNotification.createChannel(
-      {
-        channelId: 'pokemon-nearby',
-        channelName: 'Pokemon Nearby',
-        channelDescription: 'Notifications for nearby Pokemon',
-        playSound: true,
-        soundName: 'default',
-        importance: 4,
-        vibrate: true,
-      },
-      (created) => console.log(`Channel created: ${created}`)
-    );
+    if (Platform.OS === 'android') {
+      PushNotification.createChannel(
+        {
+          channelId: 'pokemon-nearby',
+          channelName: 'Pokemon Nearby',
+          channelDescription: 'Notifications for nearby Pokemon',
+          playSound: true,
+          soundName: 'default',
+          importance: 4,
+          vibrate: true,
+        },
+        (created) => console.log(`Channel created: ${created}`)
+      );
+    }
+  }
+
+  async requestPermissions() {
+    if (!PushNotification) return false;
+    
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+        console.log('Android notification permission:', granted);
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } else {
+        const permissions = await PushNotification.requestPermissions();
+        console.log('iOS notification permissions:', permissions);
+        return permissions;
+      }
+    } catch (error) {
+      console.log('Permission request error:', error);
+      return false;
+    }
   }
 
   showPokemonNearbyNotification(pokemonName: string, distance?: number) {
+    console.log(`Showing notification for ${pokemonName} at ${distance}m`);
+    
+    const message = distance 
+      ? `A wild ${pokemonName} is ${distance}m away!`
+      : `A wild ${pokemonName} has appeared nearby!`;
+    
     if (!PushNotification) {
-      Alert.alert('Pokemon Nearby!', `A wild ${pokemonName} has appeared nearby!`);
+      console.log('PushNotification not available, using Alert');
+      Alert.alert('Pokemon Nearby! 🔔', message);
       return;
     }
+    
     PushNotification.localNotification({
       channelId: 'pokemon-nearby',
       title: 'Pokemon Nearby!',
-      message: distance 
-        ? `A wild ${pokemonName} is ${distance}m away!`
-        : `A wild ${pokemonName} has appeared nearby!`,
+      message: message,
       playSound: true,
       soundName: 'default',
       importance: 'high',
