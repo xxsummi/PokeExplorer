@@ -16,11 +16,11 @@ import { HuntScreen } from './HuntScreen';
 import { CameraScreen } from './CameraScreen';
 import { AR3DScreen } from './AR3DScreen';
 import { ProfileScreen } from './ProfileScreen';
-import { VRLiteHabitatScreen } from './VRLiteHabitatScreen';
+
 import { Pokemon } from './types';
 import { authService } from './auth';
 
-type Screen = 'login' | 'pokedex' | 'detail' | 'hunt' | 'ar' | 'vr' | 'profile';
+type Screen = 'login' | 'pokedex' | 'detail' | 'hunt' | 'ar' | 'profile';
 
 function AppContent() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('login');
@@ -65,8 +65,7 @@ function AppContent() {
         return <HuntScreen />;
       case 'ar':
         return <AR3DScreen />;
-      case 'vr':
-        return <VRLiteHabitatScreen />;
+
       case 'profile':
         return <ProfileScreen onLogout={handleLogout} />;
       default:
@@ -99,14 +98,7 @@ function AppContent() {
           style={[styles.navButton, currentScreen === 'ar' && styles.activeNavButton]}
           onPress={() => setCurrentScreen('ar')}
         >
-          <Text style={[styles.navText, currentScreen === 'ar' && styles.activeNavText]}>📷 AR</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.navButton, currentScreen === 'vr' && styles.activeNavButton]}
-          onPress={() => setCurrentScreen('vr')}
-        >
-          <Text style={[styles.navText, currentScreen === 'vr' && styles.activeNavText]}>🥽 VR</Text>
+          <Text style={[styles.navText, currentScreen === 'ar' && styles.activeNavText]}>📷 AR/VR</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 

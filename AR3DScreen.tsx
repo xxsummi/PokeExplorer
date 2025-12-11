@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,10 @@ import {
   Dimensions,
   Image,
   PanResponder,
+  Platform,
 } from 'react-native';
 
+import { Camera, useCameraDevice } from 'react-native-vision-camera';
 import { useDispatch } from 'react-redux';
 import { addDiscoveredPokemon } from './store';
 import { pokeAPI } from './api';
@@ -111,6 +113,9 @@ export const AR3DScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState(false);
   const [pokemon, setPokemon] = useState<Pokemon3D[]>([]);
   const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
+  const [isActive, setIsActive] = useState(true);
+  const camera = useRef<Camera>(null);
+  const device = useCameraDevice('back');
 
   const dispatch = useDispatch();
 
@@ -162,8 +167,19 @@ export const AR3DScreen: React.FC = () => {
   });
 
   const requestCameraPermission = async () => {
-    const result = await request(PERMISSIONS.ANDROID.CAMERA);
-    setHasPermission(result === RESULTS.GRANTED);
+    try {
+      const permission = Platform.OS === 'ios' 
+        ? PERMISSIONS.IOS.CAMERA
+        : PERMISSIONS.ANDROID.CAMERA;
+      
+      const result = await request(permission);
+      setHasPermission(result === RESULTS.GRANTED);
+      if (result === RESULTS.GRANTED) {
+        setIsActive(true);
+      }
+    } catch (error) {
+      console.log('Camera permission error:', error);
+    }
   };
 
   const spawnPokemon = async () => {
@@ -225,9 +241,27 @@ export const AR3DScreen: React.FC = () => {
     );
   }
 
+  if (!device) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>No Camera Found</Text>
+        <Text style={styles.description}>Camera device not available</Text>
+        <TouchableOpacity style={styles.startButton} onPress={requestCameraPermission}>
+          <Text style={styles.buttonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.arContainer} {...panResponder.panHandlers}>
-      <View style={styles.camera} />
+      <Camera
+        ref={camera}
+        style={styles.camera}
+        device={device}
+        isActive={isActive}
+        photo={true}
+      />
       
       {pokemon.map((poke) => (
         <Pokemon3DComponent
