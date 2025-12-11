@@ -15,11 +15,13 @@ import { pokeAPI } from './api';
 interface PokemonDetailScreenProps {
   pokemon: Pokemon;
   onBack: () => void;
+  onPokemonSelect: (pokemon: Pokemon) => void;
 }
 
 export const PokemonDetailScreen: React.FC<PokemonDetailScreenProps> = ({ 
   pokemon, 
-  onBack 
+  onBack,
+  onPokemonSelect 
 }) => {
   const [evolutions, setEvolutions] = useState<any[]>([]);
   const [loadingEvolutions, setLoadingEvolutions] = useState(true);
@@ -66,7 +68,7 @@ export const PokemonDetailScreen: React.FC<PokemonDetailScreenProps> = ({
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
           <Text style={styles.shareButtonText}>Share</Text>
@@ -157,11 +159,25 @@ export const PokemonDetailScreen: React.FC<PokemonDetailScreenProps> = ({
           <View style={styles.evolutionContainer}>
             {evolutions.map((evo, index) => (
               <React.Fragment key={evo.id}>
-                <View style={styles.evolutionItem}>
+                <TouchableOpacity 
+                  style={styles.evolutionItem}
+                  onPress={async () => {
+                    try {
+                      const evolutionPokemon = await pokeAPI.getPokemon(parseInt(evo.id));
+                      onPokemonSelect(evolutionPokemon);
+                    } catch (error) {
+                      console.log('Error loading evolution:', error);
+                    }
+                  }}
+                >
+                  <Image 
+                    source={{ uri: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${evo.id}.png` }}
+                    style={styles.evolutionImage}
+                  />
                   <Text style={styles.evolutionName}>
-                    #{evo.id} {evo.name.toUpperCase()}
+                    {evo.name.charAt(0).toUpperCase() + evo.name.slice(1)}
                   </Text>
-                </View>
+                </TouchableOpacity>
                 {index < evolutions.length - 1 && (
                   <Text style={styles.evolutionArrow}>→</Text>
                 )}
@@ -179,75 +195,85 @@ export const PokemonDetailScreen: React.FC<PokemonDetailScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f8ff',
+    backgroundColor: '#F3FCFB',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 16,
+    alignItems: 'center',
+    padding: 20,
     paddingTop: 50,
   },
-  backButton: {
-    padding: 8,
-  },
   backButtonText: {
-    color: '#2c5aa0',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#2D3748',
+    fontSize: 32,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   shareButton: {
-    backgroundColor: '#2c5aa0',
+    backgroundColor: '#667EEA',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 18,
+    shadowColor: '#667EEA',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   shareButtonText: {
     color: '#fff',
-    fontWeight: 'bold',
+    fontWeight: '500',
+    fontSize: 14,
   },
   pokemonHeader: {
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
+    padding: 24,
+    backgroundColor: '#FFFFFF',
     margin: 16,
-    borderRadius: 12,
+    marginTop: 0,
+    borderRadius: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 6,
   },
   pokemonImage: {
-    width: 150,
-    height: 150,
+    width: 140,
+    height: 140,
     marginBottom: 16,
   },
   pokemonName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#2D3748',
+    marginBottom: 6,
+    textAlign: 'center',
   },
   pokemonId: {
-    fontSize: 18,
-    color: '#666',
+    fontSize: 14,
+    color: '#718096',
+    fontWeight: '500',
   },
   section: {
-    backgroundColor: '#fff',
-    margin: 16,
-    marginTop: 0,
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 20,
+    borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 4,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2c5aa0',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2D3748',
     marginBottom: 12,
   },
   typesContainer: {
@@ -257,14 +283,15 @@ const styles = StyleSheet.create({
   typeTag: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 12,
     marginRight: 8,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   typeText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '500',
+    textTransform: 'capitalize',
   },
   physicalStats: {
     flexDirection: 'row',
@@ -274,14 +301,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statLabel: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 14,
+    color: '#718096',
     marginBottom: 4,
+    fontWeight: '500',
   },
   statValue: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#2D3748',
   },
   statRow: {
     flexDirection: 'row',
@@ -291,8 +319,8 @@ const styles = StyleSheet.create({
   statName: {
     width: 80,
     fontSize: 12,
-    fontWeight: 'bold',
-    color: '#666',
+    fontWeight: '500',
+    color: '#718096',
   },
   statBarContainer: {
     flex: 1,
@@ -303,26 +331,27 @@ const styles = StyleSheet.create({
   },
   statBar: {
     height: '100%',
-    backgroundColor: '#2c5aa0',
+    backgroundColor: '#667EEA',
     borderRadius: 4,
   },
   statNumber: {
     width: 40,
     textAlign: 'right',
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#2D3748',
   },
   abilityItem: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F7FAFC',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     marginBottom: 8,
   },
   abilityName: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '500',
+    color: '#2D3748',
+    textTransform: 'capitalize',
   },
   evolutionContainer: {
     flexDirection: 'row',
@@ -330,20 +359,29 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   evolutionItem: {
-    backgroundColor: '#f8f9fa',
-    padding: 12,
+    backgroundColor: '#F7FAFC',
+    padding: 8,
     borderRadius: 8,
-    marginRight: 8,
+    marginRight: 6,
+    marginBottom: 8,
+    alignItems: 'center',
+    minWidth: 60,
+  },
+  evolutionImage: {
+    width: 30,
+    height: 30,
+    marginBottom: 4,
   },
   evolutionName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2c5aa0',
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#667EEA',
     textTransform: 'capitalize',
+    textAlign: 'center',
   },
   evolutionArrow: {
-    fontSize: 20,
-    color: '#2c5aa0',
+    fontSize: 18,
+    color: '#667EEA',
     marginRight: 8,
   },
   noEvolution: {

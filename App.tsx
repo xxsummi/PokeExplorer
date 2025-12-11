@@ -59,6 +59,7 @@ function AppContent() {
           <PokemonDetailScreen 
             pokemon={selectedPokemon} 
             onBack={() => setCurrentScreen('pokedex')} 
+            onPokemonSelect={handlePokemonSelect}
           />
         ) : null;
       case 'hunt':
