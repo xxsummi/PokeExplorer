@@ -32,17 +32,16 @@ interface Pokemon3D {
   rotation: Animated.Value;
 }
 
-const getTypeColor = (type: string): string => {
-  const colors: { [key: string]: string } = {
-    fire: '#FF6B6B', water: '#4ECDC4', grass: '#45B7D1',
-    electric: '#FFA07A', psychic: '#DDA0DD', ice: '#87CEEB',
-    dragon: '#9370DB', dark: '#696969', fairy: '#FFB6C1',
-    fighting: '#CD5C5C', poison: '#BA55D3', ground: '#F4A460',
-    flying: '#87CEFA', bug: '#9ACD32', rock: '#A0522D',
-    ghost: '#8A2BE2', steel: '#B0C4DE', normal: '#D3D3D3',
-  };
-  return colors[type] || '#D3D3D3';
-};
+interface Pokeball {
+  id: number;
+  startX: number;
+  startY: number;
+  targetX: number;
+  targetY: number;
+  translateX: Animated.Value;
+  translateY: Animated.Value;
+  targetPokemon: Pokemon3D;
+}
 
 const Pokemon3DComponent: React.FC<{ pokemon: Pokemon3D; onCatch: () => void }> = ({ pokemon, onCatch }) => {
   React.useEffect(() => {
@@ -112,57 +111,51 @@ const Pokemon3DComponent: React.FC<{ pokemon: Pokemon3D; onCatch: () => void }> 
 export const AR3DScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState(false);
   const [pokemon, setPokemon] = useState<Pokemon3D[]>([]);
-  const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
+  const [pokeballs, setPokeballs] = useState<Pokeball[]>([]);
   const [isActive, setIsActive] = useState(true);
+  const [catchingMode, setCatchingMode] = useState(false);
+  const [targetPokemon, setTargetPokemon] = useState<Pokemon3D | null>(null);
+  const [pokeballPosition] = useState(new Animated.ValueXY({ x: width / 2 - 25, y: height - 150 }));
+  const isMoving = useRef(false);
+  
   const camera = useRef<Camera>(null);
   const device = useCameraDevice('back');
-
   const dispatch = useDispatch();
 
   useEffect(() => {
     requestCameraPermission();
   }, []);
 
-  const panResponder = PanResponder.create({
+  const pokeballPanResponder = PanResponder.create({
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderMove: (evt, gestureState) => {
-      const newOffset = {
-        x: gestureState.dx * 0.5,
-        y: gestureState.dy * 0.5,
-      };
-      setCameraOffset(newOffset);
-      
-      // Update Pokemon positions to simulate 3D space
-      pokemon.forEach((poke) => {
-        Animated.timing(poke.translateX, {
-          toValue: poke.baseX - newOffset.x,
-          duration: 50,
-          useNativeDriver: true,
-        }).start();
-        
-        Animated.timing(poke.translateY, {
-          toValue: poke.baseY - newOffset.y,
-          duration: 50,
-          useNativeDriver: true,
-        }).start();
+    onPanResponderGrant: () => {
+      pokeballPosition.setOffset({
+        x: pokeballPosition.x._value,
+        y: pokeballPosition.y._value,
       });
     },
-    onPanResponderRelease: () => {
-      // Gradually return to center
-      setCameraOffset({ x: 0, y: 0 });
-      pokemon.forEach((poke) => {
-        Animated.timing(poke.translateX, {
-          toValue: poke.baseX,
-          duration: 500,
-          useNativeDriver: true,
-        }).start();
+    onPanResponderMove: Animated.event(
+      [null, { dx: pokeballPosition.x, dy: pokeballPosition.y }],
+      { useNativeDriver: false }
+    ),
+    onPanResponderRelease: (evt, gestureState) => {
+      pokeballPosition.flattenOffset();
+      
+      const velocity = Math.sqrt(gestureState.vx * gestureState.vx + gestureState.vy * gestureState.vy);
+      
+      if (velocity > 0.5) {
+        const startX = width / 2;
+        const startY = height - 150;
+        const targetX = startX + gestureState.dx * 2;
+        const targetY = startY + gestureState.dy * 2;
         
-        Animated.timing(poke.translateY, {
-          toValue: poke.baseY,
-          duration: 500,
-          useNativeDriver: true,
-        }).start();
-      });
+        throwPokeballToPosition(startX, startY, targetX, targetY);
+      }
+      
+      Animated.spring(pokeballPosition, {
+        toValue: { x: width / 2 - 25, y: height - 150 },
+        useNativeDriver: false,
+      }).start();
     },
   });
 
@@ -213,19 +206,134 @@ export const AR3DScreen: React.FC = () => {
     }
   };
 
-  const catchPokemon = async (pokemonToCatch: Pokemon3D) => {
-    try {
-      const pokemonData = await pokeAPI.getRandomPokemon();
-      dispatch(addDiscoveredPokemon(pokemonData));
+  const throwPokeballToPosition = (startX: number, startY: number, targetX: number, targetY: number) => {
+    const newPokeball: Pokeball = {
+      id: Date.now(),
+      startX,
+      startY,
+      targetX,
+      targetY,
+      translateX: new Animated.Value(startX),
+      translateY: new Animated.Value(startY),
+      targetPokemon: null as any,
+    };
+    
+    setPokeballs(prev => [...prev, newPokeball]);
+    
+    Animated.parallel([
+      Animated.timing(newPokeball.translateX, {
+        toValue: targetX,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(newPokeball.translateY, {
+        toValue: targetY,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setPokeballs(prev => prev.filter(p => p.id !== newPokeball.id));
+      checkPokemonHit(targetX, targetY);
+    });
+  };
+  
+  const enterCatchingMode = (pokemonToTarget: Pokemon3D) => {
+    setTargetPokemon(pokemonToTarget);
+    setCatchingMode(true);
+    isMoving.current = true;
+    startPokemonMovement(pokemonToTarget);
+  };
+  
+  const startPokemonMovement = (pokemon: Pokemon3D) => {
+    // Start breathing scale animation
+    const scaleAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pokemon.scale, {
+          toValue: 1.1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pokemon.scale, {
+          toValue: 0.9,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    
+    scaleAnimation.start();
+    
+    const moveRandomly = () => {
+      const newX = Math.random() * (width - 150) + 75;
+      const newY = Math.random() * (height / 2 - 100) + 100;
       
-      setPokemon(prev => prev.filter(p => p.id !== pokemonToCatch.id));
-      
-      Alert.alert(
-        'Pokemon Caught!',
-        `You caught ${pokemonToCatch.name}! Added to your Pokedex.`
+      Animated.parallel([
+        Animated.timing(pokemon.translateX, {
+          toValue: newX,
+          duration: 1500 + Math.random() * 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pokemon.translateY, {
+          toValue: newY,
+          duration: 1500 + Math.random() * 1000,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        if (isMoving.current) {
+          pokemon.baseX = newX;
+          pokemon.baseY = newY;
+          setTimeout(moveRandomly, 200 + Math.random() * 800);
+        }
+      });
+    };
+    
+    moveRandomly();
+  };
+  
+  const exitCatchingMode = () => {
+    setCatchingMode(false);
+    setTargetPokemon(null);
+    isMoving.current = false;
+  };
+  
+  const checkPokemonHit = (ballX: number, ballY: number) => {
+    if (catchingMode && targetPokemon) {
+      const pokemonX = targetPokemon.translateX._value + 75;
+      const pokemonY = targetPokemon.translateY._value + 75;
+      const distance = Math.sqrt(
+        Math.pow(ballX - pokemonX, 2) + 
+        Math.pow(ballY - pokemonY, 2)
       );
-    } catch (error) {
-      console.log('Failed to catch Pokemon:', error);
+      
+      if (distance < 500) {
+        attemptCatch(targetPokemon);
+      }
+    }
+  };
+  
+  const attemptCatch = async (pokemonToCatch: Pokemon3D) => {
+    const catchRate = Math.random();
+    
+    if (catchRate > 0.5) {
+      try {
+        const pokemonData = await pokeAPI.getRandomPokemon();
+        dispatch(addDiscoveredPokemon(pokemonData));
+        
+        setPokemon(prev => prev.filter(p => p.id !== pokemonToCatch.id));
+        
+        Alert.alert(
+          'Pokemon Caught!',
+          `You caught ${pokemonToCatch.name}! Added to your Pokedex.`
+        );
+        exitCatchingMode();
+      } catch (error) {
+        console.log('Failed to catch Pokemon:', error);
+      }
+    } else {
+      Alert.alert(
+        'Pokemon Escaped!',
+        `${pokemonToCatch.name} broke free! Try again.`
+      );
     }
   };
 
@@ -253,8 +361,87 @@ export const AR3DScreen: React.FC = () => {
     );
   }
 
+  if (catchingMode && targetPokemon) {
+    return (
+      <View style={styles.arContainer}>
+        <Camera
+          ref={camera}
+          style={styles.camera}
+          device={device}
+          isActive={isActive}
+          photo={true}
+        />
+        
+        <Animated.View
+          style={[
+            styles.movingPokemon,
+            {
+              transform: [
+                { translateX: targetPokemon.translateX },
+                { translateY: targetPokemon.translateY },
+                { scale: targetPokemon.scale },
+              ],
+            },
+          ]}
+        >
+          <Image 
+            source={{ uri: targetPokemon.sprite }}
+            style={styles.movingPokemonSprite}
+          />
+          <Text style={styles.movingPokemonName}>{targetPokemon.name.toUpperCase()}</Text>
+        </Animated.View>
+        
+        {pokeballs.map((ball) => (
+          <Animated.View
+            key={ball.id}
+            style={[
+              styles.pokeball,
+              {
+                transform: [
+                  { translateX: ball.translateX },
+                  { translateY: ball.translateY },
+                ],
+              },
+            ]}
+          >
+            <Image 
+              source={{ uri: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png' }}
+              style={styles.pokeballImage}
+            />
+          </Animated.View>
+        ))}
+        
+        <Animated.View
+          style={[
+            styles.draggablePokeball,
+            {
+              transform: [
+                { translateX: pokeballPosition.x },
+                { translateY: pokeballPosition.y },
+              ],
+            },
+          ]}
+          {...pokeballPanResponder.panHandlers}
+        >
+          <Image 
+            source={{ uri: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png' }}
+            style={styles.draggablePokeballImage}
+          />
+        </Animated.View>
+        
+        <TouchableOpacity style={styles.backButton} onPress={exitCatchingMode}>
+          <Text style={styles.buttonText}>Back</Text>
+        </TouchableOpacity>
+        
+        <Text style={styles.catchInstructions}>
+          Drag pokeball to hit the Pokemon!
+        </Text>
+      </View>
+    );
+  }
+  
   return (
-    <View style={styles.arContainer} {...panResponder.panHandlers}>
+    <View style={styles.arContainer}>
       <Camera
         ref={camera}
         style={styles.camera}
@@ -267,7 +454,7 @@ export const AR3DScreen: React.FC = () => {
         <Pokemon3DComponent
           key={poke.id}
           pokemon={poke}
-          onCatch={() => catchPokemon(poke)}
+          onCatch={() => enterCatchingMode(poke)}
         />
       ))}
       
@@ -275,7 +462,9 @@ export const AR3DScreen: React.FC = () => {
         <TouchableOpacity style={styles.spawnButton} onPress={spawnPokemon}>
           <Text style={styles.buttonText}>Spawn Pokemon</Text>
         </TouchableOpacity>
-        <Text style={styles.instructionText}>Drag to look around</Text>
+        <Text style={styles.instructionText}>
+          Tap Pokemon to enter catching mode
+        </Text>
       </View>
     </View>
   );
@@ -363,5 +552,78 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 8,
     textAlign: 'center',
+  },
+  pokeball: {
+    position: 'absolute',
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pokeballImage: {
+    width: 30,
+    height: 30,
+  },
+  draggablePokeball: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  draggablePokeballImage: {
+    width: 50,
+    height: 50,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  movingPokemon: {
+    position: 'absolute',
+    alignItems: 'center',
+    zIndex: 500,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 15,
+  },
+  movingPokemonSprite: {
+    width: 150,
+    height: 150,
+  },
+  movingPokemonName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginTop: 10,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    backgroundColor: '#e74c3c',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  catchInstructions: {
+    position: 'absolute',
+    bottom: 200,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingVertical: 8,
   },
 });
