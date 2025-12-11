@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# PokeExplorer
-=======
 # PokeExplorer 🔍⚡
 
 An interactive, augmented reality-enhanced Pokédex built with React Native. Discover, catalog, and share Pokémon in real-world contexts using geolocation, AR overlays, and device sensors.
@@ -49,13 +46,14 @@ An interactive, augmented reality-enhanced Pokédex built with React Native. Dis
 1. **React Native Development Environment**
    - Follow the [React Native Environment Setup](https://reactnative.dev/docs/set-up-your-environment) guide
    - Ensure you have Node.js 20+ installed
+   - **iOS: Ruby 3.3.x required** (NOT 3.4+, use rbenv: `rbenv install 3.3.6 && rbenv global 3.3.6`)
 
 2. **Firebase Project Setup**
    - Create a new Firebase project at [Firebase Console](https://console.firebase.google.com/)
    - Enable Authentication and Realtime Database
    - Download configuration files:
      - `google-services.json` for Android (place in `android/app/`)
-     - `GoogleService-Info.plist` for iOS (add to Xcode project)
+     - `GoogleService-Info.plist` for iOS (place in `ios/PokeExplorer/` and add to Xcode)
 
 3. **API Keys**
    - No PokeAPI key required (free tier)
@@ -70,13 +68,24 @@ An interactive, augmented reality-enhanced Pokédex built with React Native. Dis
    npm install
    ```
 
-2. **iOS Setup**
+2. **iOS Setup** (CRITICAL: Follow exactly)
    ```bash
+   # Ensure Ruby 3.3.x is active
+   rbenv install 3.3.6
+   rbenv global 3.3.6
+   
    cd ios
    bundle install
+   export LANG=en_US.UTF-8
    bundle exec pod install
    cd ..
    ```
+   
+   **iOS Configuration Requirements:**
+   - iOS Deployment Target: **15.1** (enforced in Podfile)
+   - Firebase initialization in `AppDelegate.swift` BEFORE React Native
+   - `GoogleService-Info.plist` must be in `ios/PokeExplorer/` directory
+   - Always use `export LANG=en_US.UTF-8` before pod commands
 
 3. **Environment Configuration**
    - Copy `.env.example` to `.env`
@@ -90,8 +99,10 @@ An interactive, augmented reality-enhanced Pokédex built with React Native. Dis
    - Ensure Android SDK and emulator are set up
 
    **iOS:**
-   - Add `GoogleService-Info.plist` to Xcode project
-   - Configure signing in Xcode
+   - Download `GoogleService-Info.plist` from Firebase Console
+   - Place in `ios/PokeExplorer/` directory
+   - Open Xcode and drag file into project (check "Copy items if needed")
+   - Configure signing: Xcode → Signing & Capabilities → Select your team
 
 ### Running the App
 
@@ -211,7 +222,12 @@ npm run test:coverage
 
 2. **iOS build failures**
    ```bash
-   cd ios && pod deintegrate && pod install
+   cd ios
+   rm -rf Pods Podfile.lock build DerivedData
+   export LANG=en_US.UTF-8
+   bundle exec pod install
+   cd ..
+   npm start -- --reset-cache
    ```
 
 3. **Android build issues**
@@ -250,4 +266,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 **Happy Pokémon Hunting! 🎯⚡**
->>>>>>> feature/AugmentedReality

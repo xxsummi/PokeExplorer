@@ -1,31 +1,47 @@
+import './firebase';
 import auth from '@react-native-firebase/auth';
 import { User } from './types';
 
 class AuthService {
-  async signInWithEmailAndPassword(email: string, password: string): Promise<User> {
-    const userCredential = await auth().signInWithEmailAndPassword(email, password);
-    const firebaseUser = userCredential.user;
-    
-    return {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '',
-    };
+
+  async signInWithEmail(email: string, password: string): Promise<User> {
+    try {
+      const userCredential = await auth().signInWithEmailAndPassword(email, password);
+      const firebaseUser = userCredential.user;
+      
+      return {
+        id: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        discoveredPokemon: [],
+        capturedPhotos: [],
+      };
+    } catch (error: any) {
+      throw new Error(error.message);
+    }
   }
 
-  async createUserWithEmailAndPassword(email: string, password: string): Promise<User> {
-    const userCredential = await auth().createUserWithEmailAndPassword(email, password);
-    const firebaseUser = userCredential.user;
-    
-    return {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '',
-    };
+  async signUpWithEmail(email: string, password: string): Promise<User> {
+    try {
+      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+      const firebaseUser = userCredential.user;
+      
+      return {
+        id: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        discoveredPokemon: [],
+        capturedPhotos: [],
+      };
+    } catch (error: any) {
+      throw new Error(error.message);
+    }
   }
 
   async signOut(): Promise<void> {
-    await auth().signOut();
+    try {
+      await auth().signOut();
+    } catch (error: any) {
+      throw new Error(error.message);
+    }
   }
 
   getCurrentUser(): User | null {
@@ -33,19 +49,21 @@ class AuthService {
     if (!firebaseUser) return null;
     
     return {
-      uid: firebaseUser.uid,
+      id: firebaseUser.uid,
       email: firebaseUser.email || '',
-      displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '',
+      discoveredPokemon: [],
+      capturedPhotos: [],
     };
   }
 
-  onAuthStateChanged(callback: (user: User | null) => void): () => void {
+  onAuthStateChanged(callback: (user: User | null) => void) {
     return auth().onAuthStateChanged((firebaseUser) => {
       if (firebaseUser) {
         const user: User = {
-          uid: firebaseUser.uid,
+          id: firebaseUser.uid,
           email: firebaseUser.email || '',
-          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '',
+          discoveredPokemon: [],
+          capturedPhotos: [],
         };
         callback(user);
       } else {

@@ -8,6 +8,17 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>PokeExplorer</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>MKDirectionsRequest</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.apple.maps.directionsrequest</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,6 +37,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>MKDirectionsApplicationSupportedModes</key>
+	<array>
+		<string>MKDirectionsModePedestrian</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 	  <!-- Do not change NSAllowsArbitraryLoads to true, or you will risk app rejection! -->
@@ -34,14 +49,26 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>PokeExplorer needs location access to find Pokemon near you and enable hunting features.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>PokeExplorer needs location access to find Pokemon near you and enable hunting features.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>PokeExplorer needs camera access for AR Pokemon features and photo capture.</string>
+	<string>The camera is needed for the AR/VR to work.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Location is needed for maps to work.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Location is needed for maps to work.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>PokeExplorer needs microphone access for voice search functionality.</string>
+	<string>The microphone is needed for voice search to work.</string>
+	<key>NSMotionUsageDescription</key>
+	<string></string>
+	<key>RCTNewArchEnabled</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>push-to-talk</string>
+		<string>nearby-interaction</string>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
