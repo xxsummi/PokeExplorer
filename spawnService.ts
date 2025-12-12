@@ -33,13 +33,13 @@ class SpawnService {
         !spawn.caught && spawn.expiresAt > Date.now()
       ).length;
       
-      // Harsh logarithmic delay: extremely slow at 8+ spawns
-      const baseDelay = 5000; // 5 seconds minimum
+      // Moderate spawn rate increase
+      const baseDelay = 3000; // 3 seconds minimum (was 5)
       let delay;
       if (activeSpawns >= 8) {
-        delay = 115000 + (activeSpawns - 8) * 55000; // 1:55+ minutes at 8+
+        delay = 60000 + (activeSpawns - 8) * 30000; // 1 minute at 8+ (was 1:55)
       } else {
-        const logFactor = Math.pow(activeSpawns, 2) * 5000; // Exponential scaling
+        const logFactor = Math.pow(activeSpawns, 2) * 3000; // Reduced scaling (was 5000)
         delay = baseDelay + logFactor;
       }
       

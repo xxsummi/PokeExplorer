@@ -265,6 +265,18 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
+        {searchQuery ? (
+          <TouchableOpacity 
+            style={styles.clearButton}
+            onPress={() => {
+              setSearchQuery('');
+              setSearchResults([]);
+              setSuggestions([]);
+            }}
+          >
+            <Text style={styles.clearIcon}>✕</Text>
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity 
           style={styles.voiceButton}
           onPress={() => {
@@ -409,6 +421,18 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: '#2D3748',
+  },
+  clearButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  clearIcon: {
+    fontSize: 18,
+    color: '#718096',
   },
   voiceButton: {
     backgroundColor: '#667EEA',

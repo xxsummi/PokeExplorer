@@ -149,16 +149,6 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({ onPokemonSelect, onCatch
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🏆 Recent Achievements</Text>
-        {achievements.slice(-3).reverse().map(achievement => (
-          <View key={achievement.id} style={styles.achievementCard}>
-            <Text style={styles.achievementTitle}>{achievement.title}</Text>
-            <Text style={styles.achievementDesc}>{achievement.description}</Text>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.section}>
         <Text style={styles.sectionTitle}>📋 Recent Catches ({caughtPokemon.length})</Text>
         {recentCatches.map((pokemon, index) => (
           <TouchableOpacity

@@ -55,8 +55,22 @@ export const PokemonDetailScreen: React.FC<PokemonDetailScreenProps> = ({
   };
   const handleShare = async () => {
     try {
+      const types = pokemon.types.map(t => t.type.name).join('/');
+      const abilities = pokemon.abilities.map(a => a.ability.name.replace('-', ' ')).join(', ');
+      const totalStats = pokemon.stats.reduce((sum, stat) => sum + stat.base_stat, 0);
+      const evolutionChain = evolutions.map(e => e.name.charAt(0).toUpperCase() + e.name.slice(1)).join(' → ');
+      
+      const message = `🔍 ${pokemon.name.toUpperCase()} #${pokemon.id}\n\n` +
+        `📊 Type: ${types}\n` +
+        `📏 Height: ${pokemon.height / 10}m | Weight: ${pokemon.weight / 10}kg\n\n` +
+        `⚡ BASE STATS (Total: ${totalStats}):\n` +
+        pokemon.stats.map(s => `  ${s.stat.name.toUpperCase()}: ${s.base_stat}`).join('\n') +
+        `\n\n🎯 Abilities: ${abilities}` +
+        (evolutions.length > 1 ? `\n\n🔄 Evolution: ${evolutionChain}` : '') +
+        `\n\n#Pokemon #Pokedex`;
+      
       await Share.share({
-        message: `Check out ${pokemon.name}! #${pokemon.id} - A ${pokemon.types.map(t => t.type.name).join('/')} type Pokemon!`,
+        message,
         title: `Pokemon: ${pokemon.name}`,
       });
     } catch (error) {

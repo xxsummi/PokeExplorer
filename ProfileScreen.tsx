@@ -90,10 +90,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.userInfo}>
+      {/* <View style={styles.userInfo}>
         <Text style={styles.email}>{user?.email}</Text>
-        <Text style={styles.userId}>ID: {user?.id.substring(0, 8)}...</Text>
-      </View>
+      </View> */}
 
       <View style={styles.statsContainer}>
         <Text style={styles.sectionTitle}>Statistics</Text>

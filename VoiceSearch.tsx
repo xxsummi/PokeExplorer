@@ -93,6 +93,11 @@ export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClos
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!Voice) {
+      console.log('Voice module not available');
+      return;
+    }
+    
     Voice.onSpeechStart = () => setIsListening(true);
     Voice.onSpeechEnd = () => setIsListening(false);
     Voice.onSpeechResults = (e: any) => {
@@ -110,7 +115,9 @@ export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClos
     };
 
     return () => {
-      Voice.destroy().then(Voice.removeAllListeners);
+      if (Voice) {
+        Voice.destroy().then(Voice.removeAllListeners);
+      }
     };
   }, []);
 
@@ -122,6 +129,11 @@ export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClos
 
   const startListening = async () => {
     try {
+      if (!Voice || typeof Voice.start !== 'function') {
+        Alert.alert('Error', 'Voice recognition not available');
+        return;
+      }
+      
       if (Platform.OS === 'android') {
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO
@@ -140,7 +152,9 @@ export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClos
 
   const stopListening = async () => {
     try {
-      await Voice.stop();
+      if (Voice && typeof Voice.stop === 'function') {
+        await Voice.stop();
+      }
     } catch (error) {
       console.log('Stop error:', error);
     }
