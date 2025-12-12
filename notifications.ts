@@ -1,8 +1,27 @@
 import { Platform, Alert, PermissionsAndroid } from 'react-native';
+import PushNotificationIOS from '@react-native-community/push-notification-ios';
 
 let PushNotification: any = null;
 try {
   PushNotification = require('react-native-push-notification');
+  PushNotification.configure({
+    onRegister: function (token: any) {
+      console.log('TOKEN:', token);
+    },
+    onNotification: function (notification: any) {
+      console.log('NOTIFICATION:', notification);
+      if (Platform.OS === 'ios') {
+        notification.finish(PushNotificationIOS.FetchResult.NoData);
+      }
+    },
+    permissions: {
+      alert: true,
+      badge: true,
+      sound: true,
+    },
+    popInitialNotification: true,
+    requestPermissions: Platform.OS === 'ios',
+  });
 } catch (e) {
   console.log('Push notification module not available');
 }
@@ -14,19 +33,6 @@ class NotificationService {
 
   configure() {
     if (!PushNotification) return;
-    
-    PushNotification.configure({
-      onNotification: function (notification) {
-        console.log('Notification received:', notification);
-      },
-      permissions: {
-        alert: true,
-        badge: true,
-        sound: true,
-      },
-      popInitialNotification: true,
-      requestPermissions: true,
-    });
 
     if (Platform.OS === 'android') {
       PushNotification.createChannel(
@@ -55,9 +61,12 @@ class NotificationService {
         console.log('Android notification permission:', granted);
         return granted === PermissionsAndroid.RESULTS.GRANTED;
       } else {
-        const permissions = await PushNotification.requestPermissions();
-        console.log('iOS notification permissions:', permissions);
-        return permissions;
+        PushNotificationIOS.requestPermissions({
+          alert: true,
+          badge: true,
+          sound: true,
+        });
+        return true;
       }
     } catch (error) {
       console.log('Permission request error:', error);
@@ -78,16 +87,26 @@ class NotificationService {
       return;
     }
     
-    PushNotification.localNotification({
-      channelId: 'pokemon-nearby',
-      title: 'Pokemon Nearby!',
-      message: message,
-      playSound: true,
-      soundName: 'default',
-      importance: 'high',
-      vibrate: true,
-      vibration: 300,
-    });
+    if (Platform.OS === 'ios') {
+      PushNotificationIOS.addNotificationRequest({
+        id: `pokemon-${Date.now()}`,
+        title: 'Pokemon Nearby!',
+        body: message,
+        sound: 'default',
+        badge: 1,
+      });
+    } else {
+      PushNotification.localNotification({
+        channelId: 'pokemon-nearby',
+        title: 'Pokemon Nearby!',
+        message: message,
+        playSound: true,
+        soundName: 'default',
+        importance: 'high',
+        vibrate: true,
+        vibration: 300,
+      });
+    }
   }
 
   showDailyReminderNotification() {

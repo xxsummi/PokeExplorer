@@ -57,6 +57,8 @@
 	<string>Location is needed for maps to work.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>The microphone is needed for voice search to work.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Speech recognition is needed to search for Pokemon by voice.</string>
 	<key>NSMotionUsageDescription</key>
 	<string></string>
 	<key>RCTNewArchEnabled</key>

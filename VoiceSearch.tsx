@@ -68,9 +68,18 @@ import {
 } from 'react-native';
 import { Pokemon } from './types';
 import { pokeAPI } from './api';
+import Voice from '@react-native-voice/voice';
 
 const { VoiceRecognition } = NativeModules;
-const voiceEmitter = new NativeEventEmitter(VoiceRecognition);
+let voiceEmitter: NativeEventEmitter | null = null;
+
+try {
+  if (VoiceRecognition) {
+    voiceEmitter = new NativeEventEmitter(VoiceRecognition);
+  }
+} catch (e) {
+  console.log('Voice emitter not available');
+}
 
 interface VoiceSearchProps {
   onPokemonFound: (pokemon: Pokemon) => void;
@@ -84,34 +93,24 @@ export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClos
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const startListener = voiceEmitter.addListener('onSpeechStart', () => {
-      setIsListening(true);
-    });
-
-    const endListener = voiceEmitter.addListener('onSpeechEnd', () => {
-      setIsListening(false);
-    });
-
-    const resultsListener = voiceEmitter.addListener('onSpeechResults', (text: string) => {
+    Voice.onSpeechStart = () => setIsListening(true);
+    Voice.onSpeechEnd = () => setIsListening(false);
+    Voice.onSpeechResults = (e: any) => {
+      const text = e.value?.[0] || '';
       setRecognizedText(text);
-      if (onSearchQuery) {
+      if (onSearchQuery && text) {
         const corrected = correctPokemonName(text);
         onSearchQuery(corrected);
       }
       onClose();
-    });
-
-    const errorListener = voiceEmitter.addListener('onSpeechError', () => {
+    };
+    Voice.onSpeechError = () => {
       setIsListening(false);
       Alert.alert('Error', 'Voice recognition failed');
-    });
+    };
 
     return () => {
-      startListener.remove();
-      endListener.remove();
-      resultsListener.remove();
-      errorListener.remove();
-      VoiceRecognition?.destroy();
+      Voice.destroy().then(Voice.removeAllListeners);
     };
   }, []);
 
@@ -133,7 +132,7 @@ export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClos
         }
       }
       setRecognizedText('');
-      await VoiceRecognition.startListening();
+      await Voice.start('en-US');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to start voice recognition');
     }
@@ -141,7 +140,7 @@ export const VoiceSearch: React.FC<VoiceSearchProps> = ({ onPokemonFound, onClos
 
   const stopListening = async () => {
     try {
-      await VoiceRecognition.stopListening();
+      await Voice.stop();
     } catch (error) {
       console.log('Stop error:', error);
     }

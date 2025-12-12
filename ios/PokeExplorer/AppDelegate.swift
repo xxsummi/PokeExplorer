@@ -3,6 +3,8 @@ import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
 import FirebaseCore
+import GoogleMaps
+import RNCPushNotificationIOS
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -15,6 +17,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    GMSServices.provideAPIKey("AIzaSyDafIBANQHzsGI1zHbiWY9i6ui2OnFMf_4")
     FirebaseApp.configure()
     
     let delegate = ReactNativeDelegate()
@@ -33,6 +36,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     )
 
     return true
+  }
+  
+  func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+    RNCPushNotificationIOS.didRegisterForRemoteNotifications(withDeviceToken: deviceToken)
+  }
+  
+  func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+    RNCPushNotificationIOS.didFailToRegisterForRemoteNotificationsWithError(error)
+  }
+  
+  func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+    RNCPushNotificationIOS.didReceiveRemoteNotification(userInfo, fetchCompletionHandler: completionHandler)
+  }
+  
+  func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+    completionHandler([.alert, .badge, .sound])
+  }
+  
+  func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+    RNCPushNotificationIOS.didReceive(response)
+    completionHandler()
   }
 }
 

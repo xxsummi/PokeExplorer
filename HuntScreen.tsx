@@ -260,6 +260,7 @@ export const HuntScreen: React.FC<HuntScreenProps> = ({ onCatchMode }) => {
               title={spawn.pokemon.name}
               description={`Tap here to catch • ${Math.round(distance)}m away`}
               image={{ uri: spawn.pokemon.sprites.front_default }}
+              onPress={() => handleCatch(spawn)}
               onCalloutPress={() => handleCatch(spawn)}
             />
           );

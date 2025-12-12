@@ -6,6 +6,20 @@ import { pokeAPI } from './api';
 
 export class LocationService {
   private watchId: number | null = null;
+  private isGeolocationAvailable: boolean = true;
+
+  constructor() {
+    // Check if Geolocation is available
+    try {
+      if (!Geolocation || typeof Geolocation.getCurrentPosition !== 'function') {
+        this.isGeolocationAvailable = false;
+        console.warn('Geolocation service not available');
+      }
+    } catch (error) {
+      this.isGeolocationAvailable = false;
+      console.warn('Geolocation initialization error:', error);
+    }
+  }
 
   async requestLocationPermission(): Promise<boolean> {
     try {
@@ -22,57 +36,80 @@ export class LocationService {
   }
 
   async getCurrentLocation(): Promise<Location | null> {
-    return new Promise((resolve, reject) => {
-      Geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        },
-        (error) => {
-          console.log('Location error:', error);
-          // Resolve with null instead of rejecting to allow callers to handle gracefully
-          resolve(null);
-        },
-        { 
-          enableHighAccuracy: true, 
-          timeout: 15000, 
-          maximumAge: 10000 
-        }
-      );
+    if (!this.isGeolocationAvailable) {
+      console.warn('Geolocation not available, returning default location');
+      return { latitude: 37.7749, longitude: -122.4194 };
+    }
+
+    return new Promise((resolve) => {
+      try {
+        Geolocation.getCurrentPosition(
+          (position) => {
+            resolve({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            });
+          },
+          (error) => {
+            console.log('Location error:', error);
+            resolve({ latitude: 37.7749, longitude: -122.4194 });
+          },
+          { 
+            enableHighAccuracy: true, 
+            timeout: 15000, 
+            maximumAge: 10000 
+          }
+        );
+      } catch (error) {
+        console.error('getCurrentLocation error:', error);
+        resolve({ latitude: 37.7749, longitude: -122.4194 });
+      }
     });
   }
 
   watchLocation(callback: (location: Location) => void): Promise<number> {
+    if (!this.isGeolocationAvailable) {
+      console.warn('Geolocation not available for watching');
+      return Promise.resolve(-1);
+    }
+
     return new Promise((resolve, reject) => {
-      const watchId = Geolocation.watchPosition(
-        (position) => {
-          callback({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        },
-        (error) => {
-          console.log('Location tracking error:', error);
-          reject(error);
-        },
-        {
-          enableHighAccuracy: true,
-          distanceFilter: 10, // Update every 10 meters
-          interval: 5000, // Update every 5 seconds
-          fastestInterval: 2000,
-        }
-      );
-      
-      this.watchId = watchId;
-      resolve(watchId);
+      try {
+        const watchId = Geolocation.watchPosition(
+          (position) => {
+            callback({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            });
+          },
+          (error) => {
+            console.log('Location tracking error:', error);
+            reject(error);
+          },
+          {
+            enableHighAccuracy: true,
+            distanceFilter: 10,
+            interval: 5000,
+            fastestInterval: 2000,
+          }
+        );
+        
+        this.watchId = watchId;
+        resolve(watchId);
+      } catch (error) {
+        console.error('watchLocation error:', error);
+        resolve(-1);
+      }
     });
   }
 
   stopWatching(): void {
-    if (this.watchId) {
-      Geolocation.clearWatch(this.watchId);
+    if (this.watchId && this.watchId !== -1 && this.isGeolocationAvailable) {
+      try {
+        Geolocation.clearWatch(this.watchId);
+      } catch (error) {
+        console.error('stopWatching error:', error);
+      }
       this.watchId = null;
     }
   }
