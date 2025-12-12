@@ -61,12 +61,13 @@ class NotificationService {
         console.log('Android notification permission:', granted);
         return granted === PermissionsAndroid.RESULTS.GRANTED;
       } else {
-        PushNotificationIOS.requestPermissions({
+        const permissions = await PushNotificationIOS.requestPermissions({
           alert: true,
           badge: true,
           sound: true,
         });
-        return true;
+        console.log('iOS notification permissions:', permissions);
+        return permissions.alert || permissions.badge || permissions.sound;
       }
     } catch (error) {
       console.log('Permission request error:', error);
@@ -88,12 +89,19 @@ class NotificationService {
     }
     
     if (Platform.OS === 'ios') {
+      console.log('Sending iOS notification:', message);
       PushNotificationIOS.addNotificationRequest({
         id: `pokemon-${Date.now()}`,
         title: 'Pokemon Nearby!',
         body: message,
         sound: 'default',
         badge: 1,
+        userInfo: { pokemonName },
+      }).then(() => {
+        console.log('iOS notification sent successfully');
+      }).catch((error) => {
+        console.log('iOS notification error:', error);
+        Alert.alert('Pokemon Nearby! 🔔', message);
       });
     } else {
       PushNotification.localNotification({

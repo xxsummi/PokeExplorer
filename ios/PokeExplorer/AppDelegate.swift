@@ -5,9 +5,10 @@ import ReactAppDependencyProvider
 import FirebaseCore
 import GoogleMaps
 import RNCPushNotificationIOS
+import UserNotifications
 
 @main
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   var window: UIWindow?
 
   var reactNativeDelegate: ReactNativeDelegate?
@@ -19,6 +20,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   ) -> Bool {
     GMSServices.provideAPIKey("AIzaSyDafIBANQHzsGI1zHbiWY9i6ui2OnFMf_4")
     FirebaseApp.configure()
+    
+    // Set notification delegate
+    UNUserNotificationCenter.current().delegate = self
     
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
@@ -51,7 +55,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   }
   
   func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-    completionHandler([.alert, .badge, .sound])
+    completionHandler([.banner, .list, .badge, .sound])
   }
   
   func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
