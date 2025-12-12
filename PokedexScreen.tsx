@@ -88,20 +88,30 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
         
         // Only re-search if we have a query and index has grown
         if (canSearch()) {
-          const results = searchPokemon(searchQuery.toLowerCase().replace(/\s+/g, ''), 5);
+          const results = searchPokemon(searchQuery.toLowerCase().replace(/\s+/g, ''), 200);
           const allSuggestions = suggestPokemon(searchQuery.toLowerCase().replace(/\s+/g, ''), 15);
           const newResultCount = results.length + allSuggestions.length;
           
           // Only update if we found new matches
           if (newResultCount > lastResultCount) {
-            setSearchResults(results.slice(0, 1).map(r => r.entry.data));
-            const remainingResults = results.slice(1);
-            const additionalSuggestions = allSuggestions
-              .filter(s => !results.some(r => r.entry.id === s.entry.id));
-            setSuggestions([
-              ...remainingResults.map(r => r.entry.data),
-              ...additionalSuggestions.map(s => s.entry.data)
-            ].slice(0, 10));
+            if (results.length > 5) {
+              setSearchResults(results.map(r => r.entry.data));
+              const additionalSuggestions = allSuggestions
+                .filter(s => !results.some(r => r.entry.id === s.entry.id));
+              setSuggestions(additionalSuggestions.map(s => s.entry.data).slice(0, 10));
+            } else if (results.length > 0) {
+              setSearchResults(results.slice(0, 1).map(r => r.entry.data));
+              const remainingResults = results.slice(1);
+              const additionalSuggestions = allSuggestions
+                .filter(s => !results.some(r => r.entry.id === s.entry.id));
+              setSuggestions([
+                ...remainingResults.map(r => r.entry.data),
+                ...additionalSuggestions.map(s => s.entry.data)
+              ].slice(0, 10));
+            } else {
+              setSearchResults([]);
+              setSuggestions(allSuggestions.map(s => s.entry.data).slice(0, 10));
+            }
             lastResultCount = newResultCount;
           }
         }
@@ -174,21 +184,34 @@ export const PokedexScreen: React.FC<PokedexScreenProps> = ({ onPokemonSelect })
       }
       
       // Search with partial or full index
-      const results = searchPokemon(query, 5);
+      const results = searchPokemon(query, 200); // Increased limit for type searches
       const allSuggestions = suggestPokemon(query, 15);
       
-      // Show top result as main result
-      setSearchResults(results.slice(0, 1).map(r => r.entry.data));
-      
-      // Show remaining results + additional suggestions as "Did you mean?"
-      const remainingResults = results.slice(1);
-      const additionalSuggestions = allSuggestions
-        .filter(s => !results.some(r => r.entry.id === s.entry.id));
-      
-      setSuggestions([
-        ...remainingResults.map(r => r.entry.data),
-        ...additionalSuggestions.map(s => s.entry.data)
-      ].slice(0, 10));
+      // If we have many results (likely a type search), show all
+      if (results.length > 5) {
+        setSearchResults(results.map(r => r.entry.data));
+        // Still show suggestions if available
+        const additionalSuggestions = allSuggestions
+          .filter(s => !results.some(r => r.entry.id === s.entry.id));
+        setSuggestions(additionalSuggestions.map(s => s.entry.data).slice(0, 10));
+      } else if (results.length > 0) {
+        // Show top result as main result
+        setSearchResults(results.slice(0, 1).map(r => r.entry.data));
+        
+        // Show remaining results + additional suggestions as "Did you mean?"
+        const remainingResults = results.slice(1);
+        const additionalSuggestions = allSuggestions
+          .filter(s => !results.some(r => r.entry.id === s.entry.id));
+        
+        setSuggestions([
+          ...remainingResults.map(r => r.entry.data),
+          ...additionalSuggestions.map(s => s.entry.data)
+        ].slice(0, 10));
+      } else {
+        // No results, show only suggestions
+        setSearchResults([]);
+        setSuggestions(allSuggestions.map(s => s.entry.data).slice(0, 10));
+      }
       
       setIsSearching(false);
     } catch (error) {

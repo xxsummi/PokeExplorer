@@ -10,6 +10,7 @@ interface SearchEntry {
   name: string;
   normalized: string;
   phonetic: string;
+  types: string[];
   data: any;
 }
 
@@ -87,7 +88,7 @@ export class FuzzySearchIndex {
   }
 
   // Build phase: Index all entries
-  build(entries: Array<{id: number; name: string; data: any}>): void {
+  build(entries: Array<{id: number; name: string; types?: string[]; data: any}>): void {
     this.trigramIndex.clear();
     this.entries.clear();
     this.normalizedMap.clear();
@@ -95,23 +96,38 @@ export class FuzzySearchIndex {
     for (const entry of entries) {
       const normalized = this.normalize(entry.name);
       const phonetic = this.phonetic(normalized);
+      const types = entry.types || [];
       const searchEntry: SearchEntry = {
         id: entry.id,
         name: entry.name,
         normalized,
         phonetic,
+        types,
         data: entry.data
       };
       
       this.entries.set(entry.id, searchEntry);
       this.normalizedMap.set(normalized, entry.id);
       
+      // Index name trigrams
       const trigrams = this.generateTrigrams(normalized);
       for (const trigram of trigrams) {
         if (!this.trigramIndex.has(trigram)) {
           this.trigramIndex.set(trigram, new Set());
         }
         this.trigramIndex.get(trigram)!.add(entry.id);
+      }
+      
+      // Index type trigrams
+      for (const type of types) {
+        const typeNormalized = this.normalize(type);
+        const typeTrigrams = this.generateTrigrams(typeNormalized);
+        for (const trigram of typeTrigrams) {
+          if (!this.trigramIndex.has(trigram)) {
+            this.trigramIndex.set(trigram, new Set());
+          }
+          this.trigramIndex.get(trigram)!.add(entry.id);
+        }
       }
     }
   }
@@ -128,9 +144,31 @@ export class FuzzySearchIndex {
       return [{ entry, score: 10000, distance: 0 }];
     }
     
-    // Substring match check
+    // Type exact match check - return ALL matches for type searches
+    const typeMatches: SearchResult[] = [];
+    for (const entry of this.entries.values()) {
+      for (const type of entry.types) {
+        const typeNormalized = this.normalize(type);
+        if (typeNormalized === queryNormalized) {
+          typeMatches.push({
+            entry,
+            score: 9000 - entry.id, // Sort by Pokedex number
+            distance: 0
+          });
+          break;
+        }
+      }
+    }
+    
+    if (typeMatches.length > 0) {
+      typeMatches.sort((a, b) => b.score - a.score);
+      return typeMatches; // Return all type matches, no limit
+    }
+    
+    // Substring match check (name and types)
     const substringMatches: SearchResult[] = [];
     for (const entry of this.entries.values()) {
+      // Check name
       if (entry.normalized.includes(queryNormalized) || queryNormalized.includes(entry.normalized)) {
         const distance = this.levenshtein(queryNormalized, entry.normalized);
         substringMatches.push({
@@ -138,6 +176,21 @@ export class FuzzySearchIndex {
           score: 5000 - distance * 10 - Math.abs(entry.normalized.length - queryNormalized.length),
           distance
         });
+      }
+      // Check types
+      else {
+        for (const type of entry.types) {
+          const typeNormalized = this.normalize(type);
+          if (typeNormalized.includes(queryNormalized) || queryNormalized.includes(typeNormalized)) {
+            const distance = this.levenshtein(queryNormalized, typeNormalized);
+            substringMatches.push({
+              entry,
+              score: 4500 - distance * 10 - Math.abs(typeNormalized.length - queryNormalized.length),
+              distance
+            });
+            break;
+          }
+        }
       }
     }
     
@@ -211,7 +264,7 @@ export async function initializePokemonSearch(pokeAPI: any): Promise<void> {
   if (pokemonSearchIndex) return;
   
   pokemonSearchIndex = new FuzzySearchIndex();
-  const allEntries: Array<{id: number; name: string; data: any}> = [];
+  const allEntries: Array<{id: number; name: string; types: string[]; data: any}> = [];
   
   // Load first 500 Pokemon quickly (priority batch)
   for (let i = 1; i <= 500; i++) {
@@ -220,6 +273,7 @@ export async function initializePokemonSearch(pokeAPI: any): Promise<void> {
       allEntries.push({
         id: pokemon.id,
         name: pokemon.name,
+        types: pokemon.types.map((t: any) => t.type.name),
         data: pokemon
       });
       
@@ -240,6 +294,7 @@ export async function initializePokemonSearch(pokeAPI: any): Promise<void> {
       allEntries.push({
         id: pokemon.id,
         name: pokemon.name,
+        types: pokemon.types.map((t: any) => t.type.name),
         data: pokemon
       });
       

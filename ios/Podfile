@@ -1,7 +1,16 @@
 require_relative '../node_modules/react-native/scripts/react_native_pods'
+require_relative '../node_modules/react-native-permissions/scripts/setup'
 
 platform :ios, '15.1'
 prepare_react_native_project!
+
+setup_permissions([
+  'Camera',
+  'LocationWhenInUse',
+  'Microphone',
+  'Notifications',
+  'SpeechRecognition',
+])
 
 use_frameworks! :linkage => :static
 use_modular_headers!
@@ -38,6 +47,11 @@ target 'PokeExplorer' do
   
   # Voice Recognition
   pod 'react-native-voice', :path => '../node_modules/@react-native-voice/voice'
+  
+  # Vision Camera
+  pod 'VisionCamera', :path => '../node_modules/react-native-vision-camera'
+  
+  # Permissions (configured via setup_permissions above)
 
   post_install do |installer|
     react_native_post_install(installer)

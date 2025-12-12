@@ -19,7 +19,6 @@ import { RootState } from './store';
 import { locationService } from './locationService';
 import { PokemonSpawn, Achievement } from './types';
 import { pokeAPI } from './api';
-import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
 const { width, height } = Dimensions.get('window');
 
@@ -176,13 +175,9 @@ export const AR3DScreen: React.FC<AR3DScreenProps> = ({
 
   const requestCameraPermission = async () => {
     try {
-      const permission = Platform.OS === 'ios' 
-        ? PERMISSIONS.IOS.CAMERA
-        : PERMISSIONS.ANDROID.CAMERA;
-      
-      const result = await request(permission);
-      setHasPermission(result === RESULTS.GRANTED);
-      if (result === RESULTS.GRANTED) {
+      const permission = await Camera.requestCameraPermission();
+      setHasPermission(permission === 'granted');
+      if (permission === 'granted') {
         setIsActive(true);
       }
     } catch (error) {
