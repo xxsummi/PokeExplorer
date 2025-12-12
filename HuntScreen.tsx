@@ -134,7 +134,10 @@ export const HuntScreen: React.FC<HuntScreenProps> = ({ onCatchMode }) => {
     );
     
     if (distance > 100) {
-      Alert.alert('Too Far!', `${spawn.pokemon.name} is too far away`);
+      Alert.alert(
+        'Too Far!', 
+        `${spawn.pokemon.name.charAt(0).toUpperCase() + spawn.pokemon.name.slice(1)} is ${Math.round(distance)}m away. Get within 100m to catch it!`
+      );
       return;
     }
     
@@ -253,12 +256,13 @@ export const HuntScreen: React.FC<HuntScreenProps> = ({ onCatchMode }) => {
             spawn.location.longitude
           ) : 0;
           
+          const canCatch = distance <= 100;
           return (
             <Marker
               key={spawn.id}
               coordinate={spawn.location}
-              title={spawn.pokemon.name}
-              description={`Tap here to catch • ${Math.round(distance)}m away`}
+              title={spawn.pokemon.name.charAt(0).toUpperCase() + spawn.pokemon.name.slice(1)}
+              description={canCatch ? `${Math.round(distance)}m away • Tap to catch!` : `${Math.round(distance)}m away • Too far to catch`}
               image={{ uri: spawn.pokemon.sprites.front_default }}
               onPress={() => handleCatch(spawn)}
               onCalloutPress={() => handleCatch(spawn)}
@@ -290,7 +294,7 @@ export const HuntScreen: React.FC<HuntScreenProps> = ({ onCatchMode }) => {
           <Text style={styles.noPokemonText}>No Pokemon nearby. Check the Feed for spawns!</Text>
         )}
         
-        {visibleSpawns.map((spawn, index) => {
+        {visibleSpawns.map((spawn) => {
           const distance = currentLocation ? locationService.calculateDistance(
             currentLocation.latitude,
             currentLocation.longitude,
@@ -298,10 +302,11 @@ export const HuntScreen: React.FC<HuntScreenProps> = ({ onCatchMode }) => {
             spawn.location.longitude
           ) : 0;
           
+          const canCatch = distance <= 100;
           return (
             <TouchableOpacity 
               key={spawn.id}
-              style={styles.pokemonItem}
+              style={[styles.pokemonItem, !canCatch && styles.pokemonItemDisabled]}
               onPress={() => handleCatch(spawn)}
             >
               <Image
@@ -309,10 +314,14 @@ export const HuntScreen: React.FC<HuntScreenProps> = ({ onCatchMode }) => {
                 style={styles.pokemonListImage}
               />
               <View style={styles.pokemonInfo}>
-                <Text style={styles.pokemonName}>{spawn.pokemon.name}</Text>
-                <Text style={styles.pokemonDistance}>{Math.round(distance)}m away</Text>
+                <Text style={styles.pokemonName}>
+                  {spawn.pokemon.name.charAt(0).toUpperCase() + spawn.pokemon.name.slice(1)}
+                </Text>
+                <Text style={[styles.pokemonDistance, !canCatch && styles.tooFarText]}>
+                  {Math.round(distance)}m away {!canCatch && '• Too far!'}
+                </Text>
                 <Text style={styles.pokemonCoords}>📍 {spawn.location.latitude.toFixed(4)}, {spawn.location.longitude.toFixed(4)}</Text>
-                <Text style={styles.pokemonTime}>Expires in {Math.ceil((spawn.expiresAt - Date.now()) / 60000)}m</Text>
+                <Text style={styles.pokemonTime}>Expires in {Math.ceil((spawn.expiresAt - Date.now()) / 1000)}s</Text>
               </View>
             </TouchableOpacity>
           );
@@ -547,6 +556,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  pokemonItemDisabled: {
+    backgroundColor: '#f5f5f5',
+    opacity: 0.6,
+  },
+  tooFarText: {
+    color: '#e74c3c',
+    fontWeight: 'bold',
   },
   pokemonListImage: {
     width: 50,
